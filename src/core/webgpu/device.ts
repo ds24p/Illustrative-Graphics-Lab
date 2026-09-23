@@ -15,10 +15,17 @@ function requestAdapter() {
   const gpu = getGpuApi();
   if (!gpu) return Promise.resolve(null);
 
-  adapterPromise ??= gpu.requestAdapter().catch((error) => {
-    adapterPromise = undefined;
-    throw error;
-  });
+  adapterPromise ??= gpu.requestAdapter().then(
+    (adapter) => {
+      // A null result may be temporary (for example while the GPU resets).
+      if (!adapter) adapterPromise = undefined;
+      return adapter;
+    },
+    (error) => {
+      adapterPromise = undefined;
+      throw error;
+    },
+  );
   return adapterPromise;
 }
 
@@ -26,22 +33,35 @@ export async function checkWebGpuAvailability(): Promise<BackendAvailability> {
   if (!getGpuApi()) {
     return {
       available: false,
-      reason: "WebGPU is unavailable in this browser.",
+      reason:
+        typeof isSecureContext !== "undefined" && !isSecureContext
+          ? "WebGPU requires a secure context (HTTPS or localhost)."
+          : "WebGPU is unavailable in this browser.",
     };
   }
 
   try {
     const adapter = await requestAdapter();
-    return adapter
-      ? { available: true }
-      : {
-          available: false,
-          reason: "No compatible WebGPU adapter was found.",
-        };
+    if (!adapter) {
+      return {
+        available: false,
+        reason: "No compatible WebGPU adapter was returned by this browser.",
+      };
+    }
   } catch {
     return {
       available: false,
       reason: "The WebGPU adapter could not be initialized.",
+    };
+  }
+
+  try {
+    await getWebGpuDevice();
+    return { available: true };
+  } catch {
+    return {
+      available: false,
+      reason: "The WebGPU device could not be initialized.",
     };
   }
 }
@@ -64,10 +84,12 @@ export async function getWebGpuDevice(): Promise<WebGpuDeviceHandle> {
       const device = await adapter.requestDevice();
       void device.lost.then(() => {
         devicePromise = undefined;
+        adapterPromise = undefined;
       });
       return device;
     })().catch((error) => {
       devicePromise = undefined;
+      adapterPromise = undefined;
       throw error;
     });
   }

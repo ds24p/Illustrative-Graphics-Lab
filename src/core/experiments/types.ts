@@ -1,7 +1,9 @@
 import type { ExperimentBackend, BackendId } from "../backends/types";
 import type { ExperimentParameters } from "../parameters/types";
 import type { ParameterDefinition } from "../parameters/types";
+import type { ParameterVisibilityRule } from "../parameters/types";
 import type { ExperimentRendererMap } from "../rendering/types";
+import type { ImageSource } from "../images/types";
 
 export interface ExperimentMetadata {
   id: string;
@@ -28,7 +30,41 @@ export interface DebugViewDefinition {
   id: string;
   label: string;
   description: string;
+  group?: string;
 }
+
+export interface EducationalMathBlock {
+  label?: string;
+  expressions: string[];
+  explanation?: string;
+}
+
+export interface EducationalParameterNote {
+  name: string;
+  description: string;
+}
+
+export interface MethodEducationalContent {
+  title?: string;
+  summary: string;
+  steps: string[];
+  mathematics?: EducationalMathBlock[];
+  parameters?: EducationalParameterNote[];
+  characteristics: string[];
+  computation: {
+    cpu: string;
+    gpu: string;
+  };
+}
+
+export interface MethodEducationalVariant {
+  when: ParameterVisibilityRule;
+  content: MethodEducationalContent;
+}
+
+export type MethodEducationalContentDefinition =
+  | MethodEducationalContent
+  | { variants: MethodEducationalVariant[] };
 
 export interface ExperimentMethodDefinition<
   TParameters extends ExperimentParameters = ExperimentParameters,
@@ -37,6 +73,7 @@ export interface ExperimentMethodDefinition<
   label: string;
   group?: string;
   description?: string;
+  educationalContent?: MethodEducationalContentDefinition;
   parameters?: ParameterDefinition[];
   supportedBackends: BackendId[];
   defaultBackend: BackendId;
@@ -51,6 +88,7 @@ export interface ExperimentDefinition<
   description: ExperimentDescription;
   parameters: ParameterDefinition[];
   defaultParameters: TParameters;
+  sourceParameterDefaults?: (source: ImageSource) => Partial<TParameters>;
   sampleImages: SampleImageDefinition[];
   methods: ExperimentMethodDefinition<TParameters>[];
   defaultMethodId: string;

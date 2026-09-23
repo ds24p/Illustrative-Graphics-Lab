@@ -105,6 +105,7 @@ export type ExperimentResultKind = ExperimentResult["kind"];
 export interface DebugView {
   id: string;
   label: string;
+  group?: string;
   result: ExperimentResult;
 }
 

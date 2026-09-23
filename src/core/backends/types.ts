@@ -19,6 +19,7 @@ export interface BackendOutput extends ExperimentOutput {
 export interface BackendAvailability {
   available: boolean;
   reason?: string;
+  checking?: boolean;
 }
 
 export interface ExperimentBackend<

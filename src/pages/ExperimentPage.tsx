@@ -11,9 +11,10 @@ import {
   TimingStageList,
 } from "../components/experiments/BackendComparisonSummary";
 import { BackendSelector } from "../components/experiments/BackendSelector";
+import { DebugViewGallery } from "../components/experiments/DebugViewGallery";
+import { MethodEducation } from "../components/experiments/MethodEducation";
 import { OutputPanel } from "../components/experiments/OutputPanel";
 import { ParameterPanel } from "../components/experiments/ParameterPanel";
-import { ResultCanvas } from "../components/experiments/ResultCanvas";
 import { SourceChooser } from "../components/experiments/SourceChooser";
 import { checkBackendAvailability } from "../core/backends/availability";
 import type {
@@ -62,6 +63,7 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
   const [backendAvailability, setBackendAvailability] = useState<
     Partial<Record<BackendId, BackendAvailability>>
   >({ cpu: { available: true } });
+  const [availabilityRetry, setAvailabilityRetry] = useState(0);
   const [loadingSource, setLoadingSource] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string>();
@@ -71,6 +73,11 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
     ...(method.parameters ?? []),
   ];
   const debugViewDefinitions = getMethodDebugViews(experiment, method);
+  const debugViewSummary = Array.from(
+    new Set(
+      debugViewDefinitions.map((view) => view.group).filter(Boolean),
+    ),
+  ).join(", ");
   const methodGroups = groupExperimentMethods(experiment);
   const experimentBackends = getExperimentSupportedBackends(experiment);
   const supportsBackendComparison =
@@ -94,6 +101,24 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
     setComparison(undefined);
   };
 
+  const withSourceDefaults = (
+    current: ExperimentParameters,
+    loaded: ImageSource,
+  ) => {
+    const next = { ...current };
+    const sourceDefaults = experiment.sourceParameterDefaults?.(loaded) ?? {};
+    Object.entries(sourceDefaults).forEach(([key, value]) => {
+      if (value !== undefined) next[key] = value;
+    });
+    return next;
+  };
+
+  const setLoadedSource = (loaded: ImageSource) => {
+    setSource(loaded);
+    setParameters((current) => withSourceDefaults(current, loaded));
+    clearResults();
+  };
+
   useEffect(() => {
     let active = true;
     const checking: Partial<Record<BackendId, BackendAvailability>> = {};
@@ -102,7 +127,11 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
       checking[id] =
         id === "cpu"
           ? { available: true }
-          : { available: false, reason: `Checking ${id.toUpperCase()} support...` };
+          : {
+              available: false,
+              checking: true,
+              reason: `Checking ${id.toUpperCase()} support...`,
+            };
     });
     setBackendAvailability(checking);
 
@@ -126,11 +155,11 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
     return () => {
       active = false;
     };
-  }, [method]);
+  }, [method, availabilityRetry]);
 
   useEffect(() => {
     const status = backendAvailability[backend];
-    if (status && !status.available) {
+    if (status && !status.available && !status.checking) {
       setBackend(method.defaultBackend);
       setCompareMode(false);
     }
@@ -141,8 +170,7 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
     setError(undefined);
     try {
       const loaded = await loadImageSource(sample.src, sample.label);
-      setSource(loaded);
-      clearResults();
+      setLoadedSource(loaded);
     } catch (loadError) {
       setError(
         loadError instanceof Error ? loadError.message : "The sample could not load.",
@@ -164,8 +192,7 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
     setError(undefined);
     try {
       const loaded = await loadImageFile(file);
-      setSource(loaded);
-      clearResults();
+      setLoadedSource(loaded);
     } catch (loadError) {
       setError(
         loadError instanceof Error ? loadError.message : "The image could not load.",
@@ -219,7 +246,11 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
   };
 
   const resetParameters = () => {
-    setParameters({ ...experiment.defaultParameters });
+    setParameters(
+      source
+        ? withSourceDefaults({ ...experiment.defaultParameters }, source)
+        : { ...experiment.defaultParameters },
+    );
     clearResults();
   };
 
@@ -351,21 +382,10 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
 
           {comparison && <BackendComparisonSummary report={comparison} />}
 
-          {displayedDebugViews.map((debugView) => (
-            <figure className="debug-panel" key={debugView.id}>
-              <figcaption>
-                <span>Debug visualization</span>
-                <strong>{debugView.label}</strong>
-              </figcaption>
-              <div className="debug-canvas">
-                <ResultCanvas
-                  result={debugView.result}
-                  renderers={experiment.renderers}
-                  label={debugView.label}
-                />
-              </div>
-            </figure>
-          ))}
+          <DebugViewGallery
+            views={displayedDebugViews}
+            renderers={experiment.renderers}
+          />
         </section>
 
         <aside className="control-panel">
@@ -424,6 +444,7 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
               value={backend}
               availability={backendAvailability}
               disabled={compareMode}
+              onRetry={() => setAvailabilityRetry((attempt) => attempt + 1)}
               onChange={(value) => {
                 setBackend(value);
                 clearResults();
@@ -456,7 +477,8 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
                 <span>
                   <span className="field-label">Generate intermediate views</span>
                   <small>
-                    {debugViewDefinitions.map((view) => view.label).join(", ")}
+                    {debugViewSummary ||
+                      debugViewDefinitions.map((view) => view.label).join(", ")}
                   </small>
                 </span>
                 <input
@@ -526,23 +548,12 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
         </aside>
       </div>
 
-      <section className="description-band">
-        <div className="page-width description-grid">
-          <div>
-            <span className="eyebrow">Algorithm notes</span>
-            <h2>How it works</h2>
-            <p>{experiment.description.overview}</p>
-            {experiment.description.formula && (
-              <code>{experiment.description.formula}</code>
-            )}
-          </div>
-          <ol>
-            {experiment.description.steps.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </div>
-      </section>
+      <MethodEducation
+        methodLabel={method.label}
+        content={method.educationalContent}
+        parameters={parameters}
+        fallback={experiment.description}
+      />
     </div>
   );
 }

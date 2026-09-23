@@ -2,6 +2,14 @@ import type { ImageSource } from "./types";
 
 const MAX_IMAGE_EDGE = 1800;
 
+export interface ImageLoadOptions {
+  acceptedMimeTypes?: string[];
+  maxFileBytes?: number;
+  maxSourceEdge?: number;
+  maxSourcePixels?: number;
+  resizeMaxEdge?: number;
+}
+
 function createId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 }
@@ -17,11 +25,39 @@ async function decodeImage(url: string) {
 export async function loadImageSource(
   url: string,
   name: string,
+  options: ImageLoadOptions = {},
 ): Promise<ImageSource> {
-  const image = await decodeImage(url);
+  let image: HTMLImageElement;
+  try {
+    image = await decodeImage(url);
+  } catch {
+    throw new Error("The image could not be decoded.");
+  }
+
+  if (image.naturalWidth < 1 || image.naturalHeight < 1) {
+    throw new Error("The image has invalid dimensions.");
+  }
+
+  if (
+    options.maxSourceEdge &&
+    Math.max(image.naturalWidth, image.naturalHeight) > options.maxSourceEdge
+  ) {
+    throw new Error(
+      `The image must be at most ${options.maxSourceEdge} pixels on either edge.`,
+    );
+  }
+
+  if (
+    options.maxSourcePixels &&
+    image.naturalWidth * image.naturalHeight > options.maxSourcePixels
+  ) {
+    throw new Error("The image dimensions are too large.");
+  }
+
+  const resizeMaxEdge = options.resizeMaxEdge ?? MAX_IMAGE_EDGE;
   const scale = Math.min(
     1,
-    MAX_IMAGE_EDGE / Math.max(image.naturalWidth, image.naturalHeight),
+    resizeMaxEdge / Math.max(image.naturalWidth, image.naturalHeight),
   );
   const width = Math.max(1, Math.round(image.naturalWidth * scale));
   const height = Math.max(1, Math.round(image.naturalHeight * scale));
@@ -44,9 +80,22 @@ export async function loadImageSource(
   };
 }
 
-export async function loadImageFile(file: File): Promise<ImageSource> {
-  if (!file.type.startsWith("image/")) {
+export async function loadImageFile(
+  file: File,
+  options: ImageLoadOptions = {},
+): Promise<ImageSource> {
+  const acceptedMimeTypes = options.acceptedMimeTypes;
+  const accepted = acceptedMimeTypes
+    ? acceptedMimeTypes.includes(file.type)
+    : file.type.startsWith("image/");
+
+  if (!accepted) {
     throw new Error("Choose an image file such as PNG, JPEG, or WebP.");
+  }
+
+  if (options.maxFileBytes && file.size > options.maxFileBytes) {
+    const limitMb = options.maxFileBytes / (1024 * 1024);
+    throw new Error(`The image file must be no larger than ${limitMb} MB.`);
   }
 
   const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -56,5 +105,5 @@ export async function loadImageFile(file: File): Promise<ImageSource> {
     reader.readAsDataURL(file);
   });
 
-  return loadImageSource(dataUrl, file.name);
+  return loadImageSource(dataUrl, file.name, options);
 }

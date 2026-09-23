@@ -6,6 +6,12 @@ export interface RgbaComputeRequest {
   imageData: ImageData;
   parameterData: ArrayBuffer;
   workgroupSize: readonly [number, number];
+  additionalStorageInputs?: readonly RgbaComputeStorageInput[];
+}
+
+export interface RgbaComputeStorageInput {
+  label: string;
+  data: ArrayBufferView;
 }
 
 export interface RgbaComputeResult {
@@ -20,6 +26,7 @@ export async function runRgbaComputeShader({
   imageData,
   parameterData,
   workgroupSize,
+  additionalStorageInputs = [],
 }: RgbaComputeRequest): Promise<RgbaComputeResult> {
   const { width, height } = imageData;
   const byteLength = imageData.data.byteLength;
@@ -28,6 +35,7 @@ export async function runRgbaComputeShader({
   let outputBuffer: GPUBuffer | undefined;
   let parameterBuffer: GPUBuffer | undefined;
   let readbackBuffer: GPUBuffer | undefined;
+  const additionalStorageBuffers: GPUBuffer[] = [];
 
   try {
     const setupStartedAt = performance.now();
@@ -63,6 +71,15 @@ export async function runRgbaComputeShader({
       size: byteLength,
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
     });
+    additionalStorageInputs.forEach((input) => {
+      additionalStorageBuffers.push(
+        device.createBuffer({
+          label: `${label} ${input.label}`,
+          size: Math.max(4, Math.ceil(input.data.byteLength / 4) * 4),
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        }),
+      );
+    });
     const bindGroup = device.createBindGroup({
       label: `${label} bindings`,
       layout: pipeline.getBindGroupLayout(0),
@@ -70,6 +87,10 @@ export async function runRgbaComputeShader({
         { binding: 0, resource: { buffer: inputBuffer } },
         { binding: 1, resource: { buffer: outputBuffer } },
         { binding: 2, resource: { buffer: parameterBuffer } },
+        ...additionalStorageBuffers.map((buffer, index) => ({
+          binding: index + 3,
+          resource: { buffer },
+        })),
       ],
     });
     const setupLabel = deviceHandle.reused
@@ -80,6 +101,15 @@ export async function runRgbaComputeShader({
     const uploadStartedAt = performance.now();
     device.queue.writeBuffer(inputBuffer, 0, imageData.data);
     device.queue.writeBuffer(parameterBuffer, 0, parameterData);
+    additionalStorageInputs.forEach((input, index) => {
+      const sourceBytes = new Uint8Array(
+        input.data.buffer,
+        input.data.byteOffset,
+        input.data.byteLength,
+      );
+      const uploadBytes = new Uint8Array(sourceBytes);
+      device.queue.writeBuffer(additionalStorageBuffers[index], 0, uploadBytes);
+    });
     stageTimings["Upload / preparation"] = performance.now() - uploadStartedAt;
 
     const dispatchStartedAt = performance.now();
@@ -126,5 +156,6 @@ export async function runRgbaComputeShader({
     outputBuffer?.destroy();
     parameterBuffer?.destroy();
     readbackBuffer?.destroy();
+    additionalStorageBuffers.forEach((buffer) => buffer.destroy());
   }
 }

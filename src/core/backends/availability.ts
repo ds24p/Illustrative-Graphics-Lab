@@ -12,7 +12,10 @@ export async function checkBackendAvailability(
   ) {
     return {
       available: false,
-      reason: "WebGPU is unavailable in this browser.",
+      reason:
+        typeof isSecureContext !== "undefined" && !isSecureContext
+          ? "WebGPU requires a secure context (HTTPS or localhost)."
+          : "WebGPU is unavailable in this browser.",
     };
   }
 

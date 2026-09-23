@@ -79,6 +79,76 @@ Backend support belongs to each method because different algorithms have
 different execution constraints. The experiment page derives its overall
 backend badges from all methods, so there is no second list to maintain.
 
+### Add educational content to a method
+
+Detailed teaching material belongs to the method definition, not to a React
+component or algorithm file. Add `educationalContent` beside `description`:
+
+```ts
+{
+  id: "floyd-steinberg",
+  label: "Floyd-Steinberg",
+  description: "Short text shown beside the controls.",
+  educationalContent: {
+    summary: "What the method does and what its output looks like.",
+    steps: [
+      "Quantize the current working value.",
+      "Calculate its signed error.",
+      "Distribute error to unprocessed neighbors.",
+    ],
+    mathematics: [
+      {
+        label: "Quantization error",
+        expressions: ["e = adjusted source - quantized output"],
+        explanation: "Optional context for the displayed equation.",
+      },
+    ],
+    parameters: [
+      {
+        name: "Threshold",
+        description: "Explain what changing it does to the result.",
+      },
+    ],
+    characteristics: [
+      "Deterministic raster-order error diffusion.",
+      "Sequential dependency between neighboring pixels.",
+    ],
+    computation: {
+      cpu: "A linear raster pass with mutable working values.",
+      gpu: "Not directly pixel-parallel because later pixels consume error.",
+    },
+  },
+  // parameters and backends follow
+}
+```
+
+`mathematics` and `parameters` are optional. Use normal strings for equations
+and matrices; the shared renderer preserves whitespace, so no mathematics
+library is required. The experiment page immediately displays the selected
+method's content and contains no family-specific conditions.
+
+When educational text must follow a parameter choice, use declarative
+variants. The first matching condition is shown:
+
+```ts
+educationalContent: {
+  variants: [
+    {
+      when: { parameter: "strategy", equals: "none" },
+      content: directQuantizationEducation,
+    },
+    {
+      when: { parameter: "strategy", equals: "floyd-steinberg" },
+      content: errorDiffusionEducation,
+    },
+  ],
+},
+```
+
+Conditions use the same `equals`, `notEquals`, and `oneOf` rules as parameter
+`visibleWhen`. This is useful for a Screening method whose explanation changes
+with screen type, or a Painterly method with optional textured strokes.
+
 ## 3. Define parameters
 
 Put controls shared by every method in the experiment's `parameters` array.
@@ -288,4 +358,5 @@ and interface shape only. They are intentionally not registered or implemented.
 6. Algorithm files do not import React.
 7. Experiment-only assets stay inside the family folder.
 8. The family is added to `registry.ts` only after placeholders are replaced.
-9. Run `npm run typecheck` and `npm run build`.
+9. Every method has educational content that describes its actual implementation.
+10. Run `npm run typecheck`, `npm test`, and `npm run build`.

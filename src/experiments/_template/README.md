@@ -7,6 +7,7 @@ The example contains:
 
 - shared parameters in `parameters.ts`;
 - two methods with different parameter lists;
+- method-owned educational content rendered by the generic experiment page;
 - one CPU backend per method;
 - an optional output plus two named intermediate debug views;
 - conditional parameters using `visibleWhen`;

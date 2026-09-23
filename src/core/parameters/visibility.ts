@@ -2,6 +2,7 @@ import type {
   ExperimentParameters,
   ParameterDefinition,
   ParameterVisibilityCondition,
+  ParameterVisibilityRule,
 } from "./types";
 
 function matchesCondition(
@@ -25,9 +26,14 @@ export function isParameterVisible(
 ) {
   if (!definition.visibleWhen) return true;
 
-  const conditions = Array.isArray(definition.visibleWhen)
-    ? definition.visibleWhen
-    : [definition.visibleWhen];
+  return matchesParameterConditions(definition.visibleWhen, values);
+}
+
+export function matchesParameterConditions(
+  rule: ParameterVisibilityRule,
+  values: ExperimentParameters,
+) {
+  const conditions = Array.isArray(rule) ? rule : [rule];
 
   return conditions.every((condition) => matchesCondition(condition, values));
 }

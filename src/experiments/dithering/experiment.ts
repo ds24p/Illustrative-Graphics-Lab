@@ -22,6 +22,7 @@ import {
   thresholdParameters,
 } from "./parameters";
 import type { DitheringParameters } from "./types";
+import { ditheringEducation } from "./education";
 
 const diffusionDebugViews = [
   {
@@ -119,6 +120,7 @@ export const ditheringExperiment: ExperimentDefinition<DitheringParameters> = {
       label: "Threshold",
       group: "Black & White",
       description: "A deterministic binary comparison using source >= threshold.",
+      educationalContent: ditheringEducation.threshold,
       parameters: thresholdParameters,
       debugViews: binaryDebugViews,
       supportedBackends: ["cpu", "webgpu"],
@@ -131,6 +133,7 @@ export const ditheringExperiment: ExperimentDefinition<DitheringParameters> = {
       group: "Black & White",
       description:
         "Uses a reproducible coordinate-and-seed hash for each pixel threshold.",
+      educationalContent: ditheringEducation["random-threshold"],
       parameters: randomThresholdParameters,
       debugViews: [
         originalDebugView,
@@ -154,6 +157,7 @@ export const ditheringExperiment: ExperimentDefinition<DitheringParameters> = {
       label: "Floyd-Steinberg 1D",
       group: "Black & White",
       description: "Propagates the complete quantization error to the next pixel.",
+      educationalContent: ditheringEducation["floyd-steinberg-1d"],
       debugViews: [
         originalDebugView,
         sourceIntensityDebugView,
@@ -169,6 +173,7 @@ export const ditheringExperiment: ExperimentDefinition<DitheringParameters> = {
       label: "Floyd-Steinberg 2D",
       group: "Black & White",
       description: "Uses the classic 7/16, 3/16, 5/16, 1/16 diffusion stencil.",
+      educationalContent: ditheringEducation["floyd-steinberg-2d"],
       debugViews: [
         originalDebugView,
         sourceIntensityDebugView,
@@ -185,6 +190,7 @@ export const ditheringExperiment: ExperimentDefinition<DitheringParameters> = {
       group: "Black & White",
       description:
         "Draws backward diagonal black lines and diffuses the compensated error.",
+      educationalContent: ditheringEducation["floyd-steinberg-lines"],
       parameters: lineParameters,
       debugViews: [
         originalDebugView,
@@ -212,6 +218,7 @@ export const ditheringExperiment: ExperimentDefinition<DitheringParameters> = {
       group: "Color",
       description:
         "Quantizes R, G, and B independently to L levels, producing up to L^3 colors.",
+      educationalContent: ditheringEducation["rgb-levels"],
       parameters: rgbLevelsParameters,
       debugViews: [
         originalDebugView,
@@ -236,6 +243,7 @@ export const ditheringExperiment: ExperimentDefinition<DitheringParameters> = {
       group: "Color",
       description:
         "Uses a repeating Bayer threshold to choose between adjacent levels in each RGB channel.",
+      educationalContent: ditheringEducation["rgb-levels-ordered"],
       parameters: orderedRgbLevelsParameters,
       debugViews: [
         originalDebugView,
@@ -267,6 +275,7 @@ export const ditheringExperiment: ExperimentDefinition<DitheringParameters> = {
       group: "Color",
       description:
         "Maps each RGB pixel to the nearest palette color, optionally diffusing its RGB error with Floyd-Steinberg weights.",
+      educationalContent: ditheringEducation["fixed-palette"],
       parameters: fixedPaletteParameters,
       debugViews: [
         originalDebugView,
@@ -302,6 +311,7 @@ export const ditheringExperiment: ExperimentDefinition<DitheringParameters> = {
       group: "Color",
       description:
         "Generates a deterministic source-image palette, then applies nearest-color mapping or the existing RGB Floyd-Steinberg diffusion.",
+      educationalContent: ditheringEducation["median-cut"],
       parameters: medianCutParameters,
       debugViews: [
         originalDebugView,

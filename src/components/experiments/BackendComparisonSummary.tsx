@@ -44,6 +44,9 @@ export function BackendComparisonSummary({
   const exact =
     report.difference?.differentPixels === 0 &&
     report.difference.maximumChannelDifference === 0;
+  const differencePercentage = report.difference
+    ? (report.difference.differentPixels / report.difference.totalPixels) * 100
+    : undefined;
 
   return (
     <section className="backend-comparison-report" aria-live="polite">
@@ -77,6 +80,10 @@ export function BackendComparisonSummary({
                 <div>
                   <dt>Maximum channel difference</dt>
                   <dd>{report.difference.maximumChannelDifference}</dd>
+                </div>
+                <div>
+                  <dt>Difference rate</dt>
+                  <dd>{differencePercentage?.toFixed(4)}%</dd>
                 </div>
               </dl>
               <small>{report.difference.totalPixels.toLocaleString()} pixels checked</small>
