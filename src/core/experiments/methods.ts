@@ -5,6 +5,7 @@ import type {
   ExperimentMethodDefinition,
 } from "./types";
 import type { ExperimentParameters } from "../parameters/types";
+import { matchesParameterConditions } from "../parameters/visibility";
 
 export function getExperimentMethod<
   TParameters extends ExperimentParameters,
@@ -55,6 +56,20 @@ export function groupExperimentMethods<
 export function getMethodDebugViews(
   experiment: ExperimentDefinition,
   method: ExperimentMethodDefinition,
+  parameters?: ExperimentParameters,
 ): DebugViewDefinition[] {
-  return [...(experiment.debugViews ?? []), ...(method.debugViews ?? [])];
+  const definitions = [...(experiment.debugViews ?? []), ...(method.debugViews ?? [])];
+  return parameters
+    ? definitions.filter((view) => !view.visibleWhen || matchesParameterConditions(view.visibleWhen, parameters))
+    : definitions;
+}
+
+export function getMethodSupportedBackends(
+  method: ExperimentMethodDefinition,
+  parameters: ExperimentParameters,
+): BackendId[] {
+  return method.supportedBackends.filter((backend) => {
+    const condition = method.backendConditions?.[backend];
+    return !condition || matchesParameterConditions(condition, parameters);
+  });
 }

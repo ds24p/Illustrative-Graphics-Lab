@@ -1,10 +1,22 @@
 import type { ExperimentDefinition } from "../experiments/types";
-import { getExperimentMethod } from "../experiments/methods";
+import { getExperimentMethod, getMethodSupportedBackends } from "../experiments/methods";
 import type { ImageSource } from "../images/types";
 import type { ExperimentParameters } from "../parameters/types";
 import { compareRasterResults } from "../results/compareRasterResults";
+import { comparePointResults } from "../results/comparePointResults";
+import type { ExperimentResult } from "../results/types";
 import { runExperiment } from "./runExperiment";
 import type { BackendComparisonReport } from "./types";
+
+export function compareBackendOutputs(first: ExperimentResult, second: ExperimentResult): NonNullable<BackendComparisonReport["difference"]> {
+  if (first.kind === "raster" && second.kind === "raster") {
+    return { kind: "raster", data: compareRasterResults(first, second) };
+  }
+  if (first.kind === "points" && second.kind === "points") {
+    return { kind: "points", data: comparePointResults(first, second) };
+  }
+  throw new Error("These result types cannot be compared yet.");
+}
 
 export async function compareCpuAndWebGpu<
   TParameters extends ExperimentParameters,
@@ -17,8 +29,8 @@ export async function compareCpuAndWebGpu<
 ): Promise<BackendComparisonReport> {
   const method = getExperimentMethod(experiment, methodId);
   if (
-    !method.supportedBackends.includes("cpu") ||
-    !method.supportedBackends.includes("webgpu")
+    !getMethodSupportedBackends(method, parameters).includes("cpu") ||
+    !getMethodSupportedBackends(method, parameters).includes("webgpu")
   ) {
     throw new Error(`${method.label} does not support CPU/WebGPU comparison.`);
   }
@@ -54,7 +66,7 @@ export async function compareCpuAndWebGpu<
     return {
       cpu,
       webgpu,
-      difference: compareRasterResults(cpu.output, webgpu.output),
+      difference: compareBackendOutputs(cpu.output, webgpu.output),
     };
   } catch (comparisonError) {
     return {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Clock3,
   Download,
@@ -17,6 +17,7 @@ import { OutputPanel } from "../components/experiments/OutputPanel";
 import { ParameterPanel } from "../components/experiments/ParameterPanel";
 import { SourceChooser } from "../components/experiments/SourceChooser";
 import { checkBackendAvailability } from "../core/backends/availability";
+import { backendCatalog } from "../core/backends/catalog";
 import type {
   BackendAvailability,
   BackendId,
@@ -30,9 +31,12 @@ import {
   getExperimentMethod,
   getExperimentSupportedBackends,
   getMethodDebugViews,
+  getMethodSupportedBackends,
 } from "../core/experiments/methods";
 import { compareCpuAndWebGpu } from "../core/execution/compareBackends";
+import { resolveMethodEducationalContent } from "../core/experiments/education";
 import { runExperiment } from "../core/execution/runExperiment";
+import { LatestRun } from "../core/execution/latestRun";
 import type {
   BackendComparisonReport,
   ExperimentRunReport,
@@ -49,11 +53,12 @@ interface ExperimentWorkspaceProps {
 }
 
 function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
+  const initialMethod = getExperimentMethod(experiment, experiment.defaultMethodId);
   const [parameters, setParameters] = useState<ExperimentParameters>({
     ...experiment.defaultParameters,
+    ...initialMethod.defaultParameters,
   });
   const [methodId, setMethodId] = useState(experiment.defaultMethodId);
-  const initialMethod = getExperimentMethod(experiment, experiment.defaultMethodId);
   const [backend, setBackend] = useState<BackendId>(initialMethod.defaultBackend);
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [source, setSource] = useState<ImageSource>();
@@ -67,12 +72,18 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
   const [loadingSource, setLoadingSource] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string>();
+  const latestRun = useRef(new LatestRun());
+  const runController = useRef<AbortController | undefined>(undefined);
+  const sourceRequest = useRef(0);
   const method = getExperimentMethod(experiment, methodId);
+  const supportedBackends = getMethodSupportedBackends(method, parameters);
+  const supportedBackendsKey = supportedBackends.join(",");
   const parameterDefinitions = [
     ...experiment.parameters,
     ...(method.parameters ?? []),
   ];
-  const debugViewDefinitions = getMethodDebugViews(experiment, method);
+  const debugViewDefinitions = getMethodDebugViews(experiment, method, parameters);
+  const resolvedEducation = resolveMethodEducationalContent(method.educationalContent, parameters);
   const debugViewSummary = Array.from(
     new Set(
       debugViewDefinitions.map((view) => view.group).filter(Boolean),
@@ -81,8 +92,8 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
   const methodGroups = groupExperimentMethods(experiment);
   const experimentBackends = getExperimentSupportedBackends(experiment);
   const supportsBackendComparison =
-    method.supportedBackends.includes("cpu") &&
-    method.supportedBackends.includes("webgpu");
+    supportedBackends.includes("cpu") &&
+    supportedBackends.includes("webgpu");
   const webGpuAvailable = backendAvailability.webgpu?.available === true;
   const previewAspectRatio = source
     ? `${source.imageData.width} / ${source.imageData.height}`
@@ -101,6 +112,27 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
     setComparison(undefined);
   };
 
+  const invalidateRun = () => {
+    latestRun.current.invalidate();
+    runController.current?.abort();
+    runController.current = undefined;
+    setRunning(false);
+  };
+
+  useEffect(() => () => {
+    latestRun.current.invalidate();
+    runController.current?.abort();
+    const disposed = new Set<object>();
+    experiment.methods.forEach((candidate) => {
+      Object.values(candidate.backends).forEach((implementation) => {
+        if (implementation && !disposed.has(implementation)) {
+          implementation.dispose?.();
+          disposed.add(implementation);
+        }
+      });
+    });
+  }, [experiment]);
+
   const withSourceDefaults = (
     current: ExperimentParameters,
     loaded: ImageSource,
@@ -114,6 +146,7 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
   };
 
   const setLoadedSource = (loaded: ImageSource) => {
+    invalidateRun();
     setSource(loaded);
     setParameters((current) => withSourceDefaults(current, loaded));
     clearResults();
@@ -123,7 +156,7 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
     let active = true;
     const checking: Partial<Record<BackendId, BackendAvailability>> = {};
 
-    method.supportedBackends.forEach((id) => {
+    supportedBackends.forEach((id) => {
       checking[id] =
         id === "cpu"
           ? { available: true }
@@ -136,7 +169,7 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
     setBackendAvailability(checking);
 
     void Promise.all(
-      method.supportedBackends.map(async (id) => {
+      supportedBackends.map(async (id) => {
         const candidate = method.backends[id];
         const status = candidate
           ? await checkBackendAvailability(candidate)
@@ -155,28 +188,34 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
     return () => {
       active = false;
     };
-  }, [method, availabilityRetry]);
+  }, [method, supportedBackendsKey, availabilityRetry]);
 
   useEffect(() => {
     const status = backendAvailability[backend];
-    if (status && !status.available && !status.checking) {
+    if (!supportedBackends.includes(backend) || (status && !status.available && !status.checking)) {
+      invalidateRun();
+      clearResults();
       setBackend(method.defaultBackend);
       setCompareMode(false);
     }
-  }, [backend, backendAvailability, method.defaultBackend]);
+  }, [backend, backendAvailability, method.defaultBackend, supportedBackendsKey]);
 
   const selectSample = async (sample: SampleImageDefinition) => {
+    invalidateRun();
+    const request = ++sourceRequest.current;
     setLoadingSource(true);
     setError(undefined);
     try {
       const loaded = await loadImageSource(sample.src, sample.label);
+      if (request !== sourceRequest.current) return;
       setLoadedSource(loaded);
     } catch (loadError) {
+      if (request !== sourceRequest.current) return;
       setError(
         loadError instanceof Error ? loadError.message : "The sample could not load.",
       );
     } finally {
-      setLoadingSource(false);
+      if (request === sourceRequest.current) setLoadingSource(false);
     }
   };
 
@@ -188,75 +227,94 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
   }, [experiment.metadata.id]);
 
   const selectFile = async (file: File) => {
+    invalidateRun();
+    const request = ++sourceRequest.current;
     setLoadingSource(true);
     setError(undefined);
     try {
       const loaded = await loadImageFile(file);
+      if (request !== sourceRequest.current) return;
       setLoadedSource(loaded);
     } catch (loadError) {
+      if (request !== sourceRequest.current) return;
       setError(
         loadError instanceof Error ? loadError.message : "The image could not load.",
       );
     } finally {
-      setLoadingSource(false);
+      if (request === sourceRequest.current) setLoadingSource(false);
     }
   };
 
   const apply = async () => {
     if (!source) return;
+    runController.current?.abort();
+    const controller = new AbortController();
+    runController.current = controller;
+    const runId = latestRun.current.begin();
     setRunning(true);
     setError(undefined);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    if (!latestRun.current.isCurrent(runId)) return;
     try {
       clearResults();
       if (compareMode) {
-        setComparison(
-          await compareCpuAndWebGpu(
+        const nextComparison = await compareCpuAndWebGpu(
             experiment,
             methodId,
             source,
             parameters,
             debugEnabled,
-          ),
-        );
+          );
+        if (latestRun.current.isCurrent(runId)) setComparison(nextComparison);
       } else {
-        setReport(
-          await runExperiment(
+        const nextReport = await runExperiment(
             experiment,
             methodId,
             source,
             parameters,
             backend,
             debugEnabled,
-          ),
-        );
+            controller.signal,
+          );
+        if (latestRun.current.isCurrent(runId)) setReport(nextReport);
       }
     } catch (runError) {
-      setError(
+      if (latestRun.current.isCurrent(runId)) setError(
         runError instanceof Error ? runError.message : "The experiment failed.",
       );
     } finally {
-      setRunning(false);
+      if (latestRun.current.isCurrent(runId)) {
+        runController.current = undefined;
+        setRunning(false);
+      }
     }
   };
 
   const updateParameters = (values: ExperimentParameters) => {
+    invalidateRun();
     setParameters(values);
     clearResults();
   };
 
   const resetParameters = () => {
+    invalidateRun();
+    const defaults = {
+      ...experiment.defaultParameters,
+      ...method.defaultParameters,
+    };
     setParameters(
       source
-        ? withSourceDefaults({ ...experiment.defaultParameters }, source)
-        : { ...experiment.defaultParameters },
+        ? withSourceDefaults(defaults, source)
+        : defaults,
     );
     clearResults();
   };
 
   const selectMethod = (nextMethodId: string) => {
+    invalidateRun();
     const nextMethod = getExperimentMethod(experiment, nextMethodId);
     setMethodId(nextMethodId);
+    setParameters((current) => ({ ...current, ...nextMethod.defaultParameters }));
     setBackend(nextMethod.defaultBackend);
     setDebugEnabled(false);
     setCompareMode(false);
@@ -385,6 +443,7 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
           <DebugViewGallery
             views={displayedDebugViews}
             renderers={experiment.renderers}
+            definitions={debugViewDefinitions}
           />
         </section>
 
@@ -440,12 +499,14 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
               <h2>Execution</h2>
             </div>
             <BackendSelector
-              supportedBackends={method.supportedBackends}
+              supportedBackends={supportedBackends}
               value={backend}
               availability={backendAvailability}
               disabled={compareMode}
               onRetry={() => setAvailabilityRetry((attempt) => attempt + 1)}
+              supportNote={resolvedEducation?.executionSummary}
               onChange={(value) => {
+                invalidateRun();
                 setBackend(value);
                 clearResults();
               }}
@@ -458,13 +519,14 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
               >
                 <span>
                   <span className="field-label">Compare CPU and WebGPU</span>
-                  <small>Run both backends and compare their raster pixels.</small>
+                  <small>Raster pixels or ordered point positions.</small>
                 </span>
                 <input
                   type="checkbox"
                   checked={compareMode}
                   disabled={!webGpuAvailable || running}
                   onChange={(event) => {
+                    invalidateRun();
                     setCompareMode(event.target.checked);
                     clearResults();
                   }}
@@ -478,13 +540,14 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
                   <span className="field-label">Generate intermediate views</span>
                   <small>
                     {debugViewSummary ||
-                      debugViewDefinitions.map((view) => view.label).join(", ")}
+                      `${debugViewDefinitions.length} views for this strategy`}
                   </small>
                 </span>
                 <input
                   type="checkbox"
                   checked={debugEnabled}
                   onChange={(event) => {
+                    invalidateRun();
                     setDebugEnabled(event.target.checked);
                     clearResults();
                   }}
@@ -525,7 +588,7 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
           <div className="timing-panel" aria-live="polite">
             <Clock3 size={18} />
             <div>
-              <span>Processing time</span>
+              <span title="Wall-clock backend run, excluding backend availability checks and Canvas display.">Processing time</span>
               <strong>
                 {comparison
                   ? "Comparison complete"
@@ -539,7 +602,18 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
                     {report.usedBackend.toUpperCase()} backend
                     {report.fallbackReason ? ` - ${report.fallbackReason}` : ""}
                   </small>
+                  <small className="timing-explanation">{backendCatalog[report.usedBackend].timingNote}</small>
                   <TimingStageList stages={report.timing.stages} />
+                  {report.statistics && (
+                    <dl className="run-statistics">
+                      {report.statistics.map(({ label, value }) => (
+                        <div key={label}>
+                          <dt>{label}</dt>
+                          <dd>{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
                 </>
               )}
               {comparison && <small>See the breakdown beside the results.</small>}
@@ -549,6 +623,7 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
       </div>
 
       <MethodEducation
+        key={`${method.id}:${resolvedEducation?.title ?? ""}`}
         methodLabel={method.label}
         content={method.educationalContent}
         parameters={parameters}

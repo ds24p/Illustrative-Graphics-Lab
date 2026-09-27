@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stippling Ownership WebGPU Prototype</title>
+    <style>
+      body { max-width: 900px; margin: 2rem auto; padding: 0 1rem; font: 15px/1.5 system-ui; }
+      button { padding: .6rem 1rem; cursor: pointer; }
+      pre { padding: 1rem; overflow: auto; background: #f1f3f5; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <h1>Sampled Lloyd ownership prototype</h1>
+    <p>Development-only GPU benchmark. No centroid or point movement.</p>
+    <button id="run" type="button">Run ownership benchmark</button>
+    <p id="status" role="status">Ready</p>
+    <pre id="result"></pre>
+    <script type="module" src="/src/dev/stipplingOwnershipBench.ts"></script>
+  </body>
+</html>

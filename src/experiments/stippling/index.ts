@@ -1,0 +1,1 @@
+export { stipplingExperiment } from "./experiment";

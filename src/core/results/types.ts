@@ -109,8 +109,14 @@ export interface DebugView {
   result: ExperimentResult;
 }
 
+export interface ResultStatistic {
+  label: string;
+  value: string;
+}
+
 // Algorithms can return explanatory views without knowing anything about React.
 export interface ExperimentOutput {
   output: ExperimentResult;
   debugViews?: DebugView[];
+  statistics?: ResultStatistic[];
 }

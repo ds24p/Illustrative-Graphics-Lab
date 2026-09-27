@@ -12,6 +12,7 @@ interface BackendSelectorProps {
   availability?: Partial<Record<BackendId, BackendAvailability>>;
   disabled?: boolean;
   onRetry?: () => void;
+  supportNote?: string;
 }
 
 export function BackendSelector({
@@ -21,6 +22,7 @@ export function BackendSelector({
   availability,
   disabled = false,
   onRetry,
+  supportNote,
 }: BackendSelectorProps) {
   const unavailable = supportedBackends
     .map((backend) => ({ backend, status: availability?.[backend] }))
@@ -48,6 +50,8 @@ export function BackendSelector({
           ))}
         </select>
       </label>
+      <small className="backend-description">{backendCatalog[value].description}</small>
+      {supportNote && <small className="backend-support-note">{supportNote}</small>}
       {unavailable?.status?.reason && (
         <div className={`backend-availability${unavailable.status.checking ? " is-checking" : ""}`}>
           <small role="status">

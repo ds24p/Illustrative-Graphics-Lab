@@ -79,6 +79,22 @@ Backend support belongs to each method because different algorithms have
 different execution constraints. The experiment page derives its overall
 backend badges from all methods, so there is no second list to maintain.
 
+An algorithm strategy is not an execution backend. For example, Poisson
+**Exact Distance** is the spacing rule; **CPU** and **Worker** run that same
+rule in different places. Historical Occupancy Buffer is a different spacing
+rule, not a backend. When one method has a strategy parameter and only some
+strategies support a backend, use `backendConditions` in its method definition:
+
+```ts
+supportedBackends: ["cpu", "worker"],
+backendConditions: { worker: { parameter: "spacingCheck", equals: "exact" } },
+backends: { cpu: poissonCpuBackend, worker: poissonWorkerBackend },
+```
+
+The generic selector then shows Worker only for Exact Distance. The runner
+checks the same condition, so a stale or programmatic Worker request cannot
+run a different strategy by mistake.
+
 ### Add educational content to a method
 
 Detailed teaching material belongs to the method definition, not to a React
@@ -163,9 +179,12 @@ Supported kinds are:
 - `select`: experiment-defined options;
 - `color`: browser color picker.
 
-Every value also belongs in the parameter type and `defaultParameters` object.
-Keeping defaults in one complete object means switching methods does not erase
-the values previously entered for another method.
+Every value also belongs in the parameter type and the family's complete
+`defaultParameters` object. Usually, switching methods keeps entered values.
+If a method needs a different default for a shared key (for example, a smaller
+`maxAttempts` for a slower method), put only those overrides in that method's
+`defaultParameters`. Selecting or resetting that method applies its overrides;
+other values remain unchanged.
 
 ## 4. Show a parameter conditionally
 
@@ -347,6 +366,26 @@ reports the reason to the interface.
 
 The template's `backend.webgpu.example.ts` and `shader.wgsl` show file placement
 and interface shape only. They are intentionally not registered or implemented.
+
+## 10. Add a Worker when the CPU run blocks the UI
+
+A Worker is useful for expensive CPU methods, not automatically for every
+method. Keep the mathematical function in `algorithm.cpu.ts`. The Worker entry
+imports that function; do not duplicate its calculations in a separate
+`algorithm.worker.ts`. See `src/experiments/stippling/worker/` for a small typed
+request/response protocol and a reusable Worker client. A method's
+`backend.worker.ts` converts inputs/results, while React stays unaware of the
+message format.
+
+If you transfer an `ArrayBuffer`, its sender loses access to it. Derive or copy
+only the data the Worker needs; do not transfer the preview's original
+`ImageData` buffer. Generate expensive debug data in the Worker only when
+`debugEnabled` is true. Return algorithmic data and debug results, leaving
+Canvas rendering on the main thread. Connect `signal` to cancellation and
+dispose of the Worker when its page is left. The generic runner can fall back
+to the same method's CPU backend after a Worker failure, but cancellation is
+not a failure. Compare both output parity and timing: Worker algorithm time
+is different from its end-to-end time including messages and preparation.
 
 ## Final checklist
 

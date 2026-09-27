@@ -1,6 +1,7 @@
 import type { BackendId } from "../backends/types";
-import type { DebugView, ExperimentResult } from "../results/types";
+import type { DebugView, ExperimentResult, ResultStatistic } from "../results/types";
 import type { RasterDifference } from "../results/compareRasterResults";
+import type { PointDifference } from "../results/comparePointResults";
 
 export interface ProcessingTiming {
   totalMs: number;
@@ -11,6 +12,7 @@ export interface ProcessingTiming {
 export interface ExperimentRunReport {
   output: ExperimentResult;
   debugViews: DebugView[];
+  statistics?: ResultStatistic[];
   requestedBackend: BackendId;
   usedBackend: BackendId;
   fallbackReason?: string;
@@ -20,6 +22,6 @@ export interface ExperimentRunReport {
 export interface BackendComparisonReport {
   cpu: ExperimentRunReport;
   webgpu: ExperimentRunReport;
-  difference?: RasterDifference;
+  difference?: { kind: "raster"; data: RasterDifference } | { kind: "points"; data: PointDifference };
   comparisonUnavailableReason?: string;
 }

@@ -41,11 +41,14 @@ export function BackendComparisonSummary({
 }: {
   report: BackendComparisonReport;
 }) {
-  const exact =
-    report.difference?.differentPixels === 0 &&
-    report.difference.maximumChannelDifference === 0;
-  const differencePercentage = report.difference
-    ? (report.difference.differentPixels / report.difference.totalPixels) * 100
+  const { difference } = report;
+  const exact = difference?.kind === "raster"
+    ? difference.data.differentPixels === 0 && difference.data.maximumChannelDifference === 0
+    : difference?.kind === "points"
+      ? difference.data.firstCount === difference.data.secondCount && difference.data.maximumDisplacement === 0
+      : false;
+  const differencePercentage = difference?.kind === "raster"
+    ? (difference.data.differentPixels / difference.data.totalPixels) * 100
     : undefined;
 
   return (
@@ -55,9 +58,9 @@ export function BackendComparisonSummary({
           <span className="eyebrow">Backend comparison</span>
           <h2>CPU and WebGPU</h2>
         </div>
-        {report.difference && (
+        {difference && (
           <strong className={exact ? "comparison-match" : "comparison-mismatch"}>
-            {exact ? "Exact match" : "Outputs differ"}
+            {exact ? "Exact match" : difference.kind === "points" ? "Coordinates differ" : "Outputs differ"}
           </strong>
         )}
       </header>
@@ -69,24 +72,34 @@ export function BackendComparisonSummary({
           report={report.webgpu}
         />
         <div className="comparison-differences">
-          <span>Pixel differences</span>
-          {report.difference ? (
+          <span>{difference?.kind === "points" ? "Point differences" : "Pixel differences"}</span>
+          {difference?.kind === "raster" ? (
             <>
               <dl>
                 <div>
                   <dt>Different pixels</dt>
-                  <dd>{report.difference.differentPixels.toLocaleString()}</dd>
+                  <dd>{difference.data.differentPixels.toLocaleString()}</dd>
                 </div>
                 <div>
                   <dt>Maximum channel difference</dt>
-                  <dd>{report.difference.maximumChannelDifference}</dd>
+                  <dd>{difference.data.maximumChannelDifference}</dd>
                 </div>
                 <div>
                   <dt>Difference rate</dt>
                   <dd>{differencePercentage?.toFixed(4)}%</dd>
                 </div>
               </dl>
-              <small>{report.difference.totalPixels.toLocaleString()} pixels checked</small>
+              <small>{difference.data.totalPixels.toLocaleString()} pixels checked</small>
+            </>
+          ) : difference?.kind === "points" ? (
+            <>
+              <dl>
+                <div><dt>CPU points</dt><dd>{difference.data.firstCount.toLocaleString()}</dd></div>
+                <div><dt>WebGPU points</dt><dd>{difference.data.secondCount.toLocaleString()}</dd></div>
+                <div><dt>Mean displacement</dt><dd>{difference.data.meanDisplacement.toFixed(4)} px</dd></div>
+                <div><dt>Maximum displacement</dt><dd>{difference.data.maximumDisplacement.toFixed(4)} px</dd></div>
+              </dl>
+              <small>{difference.data.pairedCount.toLocaleString()} ordered points compared</small>
             </>
           ) : (
             <p>{report.comparisonUnavailableReason}</p>

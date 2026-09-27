@@ -1,24 +1,29 @@
 import type { DebugView } from "../../core/results/types";
+import type { DebugViewDefinition } from "../../core/experiments/types";
 import type { ExperimentRendererMap } from "../../core/rendering/types";
 import { ResultCanvas } from "./ResultCanvas";
 
 interface DebugViewGalleryProps {
   views: DebugView[];
   renderers?: ExperimentRendererMap;
+  definitions?: DebugViewDefinition[];
 }
 
 function DebugPanel({
   view,
   renderers,
+  description,
 }: {
   view: DebugView;
   renderers?: ExperimentRendererMap;
+  description?: string;
 }) {
   return (
     <figure className="debug-panel">
       <figcaption>
         <span>Debug visualization</span>
         <strong>{view.label}</strong>
+        {description && <small>{description}</small>}
       </figcaption>
       <div className="debug-canvas">
         <ResultCanvas
@@ -31,7 +36,8 @@ function DebugPanel({
   );
 }
 
-export function DebugViewGallery({ views, renderers }: DebugViewGalleryProps) {
+export function DebugViewGallery({ views, renderers, definitions }: DebugViewGalleryProps) {
+  const descriptions = new Map(definitions?.map(({ id, description }) => [id, description]));
   const groups = new Map<string, DebugView[]>();
   views.forEach((view) => {
     const key = view.group ?? "";
@@ -49,14 +55,14 @@ export function DebugViewGallery({ views, renderers }: DebugViewGalleryProps) {
         </header>
         <div className="debug-group-grid">
           {groupViews.map((view) => (
-            <DebugPanel key={view.id} view={view} renderers={renderers} />
+            <DebugPanel key={view.id} view={view} renderers={renderers} description={descriptions.get(view.id)} />
           ))}
         </div>
       </section>
     ) : (
       <div className="debug-ungrouped" key="ungrouped">
         {groupViews.map((view) => (
-          <DebugPanel key={view.id} view={view} renderers={renderers} />
+          <DebugPanel key={view.id} view={view} renderers={renderers} description={descriptions.get(view.id)} />
         ))}
       </div>
     ),

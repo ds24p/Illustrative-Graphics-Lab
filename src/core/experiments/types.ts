@@ -31,6 +31,7 @@ export interface DebugViewDefinition {
   label: string;
   description: string;
   group?: string;
+  visibleWhen?: ParameterVisibilityRule;
 }
 
 export interface EducationalMathBlock {
@@ -47,12 +48,15 @@ export interface EducationalParameterNote {
 export interface MethodEducationalContent {
   title?: string;
   summary: string;
+  executionSummary?: string;
+  collapseDetails?: boolean;
   steps: string[];
   mathematics?: EducationalMathBlock[];
   parameters?: EducationalParameterNote[];
   characteristics: string[];
   computation: {
     cpu: string;
+    worker?: string;
     gpu: string;
   };
 }
@@ -75,7 +79,11 @@ export interface ExperimentMethodDefinition<
   description?: string;
   educationalContent?: MethodEducationalContentDefinition;
   parameters?: ParameterDefinition[];
+  // Overrides family defaults only for the selected method.
+  defaultParameters?: ExperimentParameters;
   supportedBackends: BackendId[];
+  // A family method can expose an execution backend only for selected strategies.
+  backendConditions?: Partial<Record<BackendId, ParameterVisibilityRule>>;
   defaultBackend: BackendId;
   backends: Partial<Record<BackendId, ExperimentBackend<TParameters>>>;
   debugViews?: DebugViewDefinition[];

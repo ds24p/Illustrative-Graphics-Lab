@@ -28,6 +28,7 @@ export interface ExperimentBackend<
   readonly id: BackendId;
   checkAvailability?: () => Promise<BackendAvailability>;
   run(input: ExperimentRunInput<TParameters>): Promise<BackendOutput>;
+  dispose?: () => void;
 }
 
 // A future WGSL implementation satisfies this interface without changing the UI.

@@ -2,7 +2,7 @@ import type { BackendId, ExperimentBackend } from "../backends/types";
 import { checkBackendAvailability } from "../backends/availability";
 import type { ExperimentDefinition } from "../experiments/types";
 import type { ExperimentMethodDefinition } from "../experiments/types";
-import { getExperimentMethod } from "../experiments/methods";
+import { getExperimentMethod, getMethodSupportedBackends } from "../experiments/methods";
 import type { ImageSource } from "../images/types";
 import type { ExperimentParameters } from "../parameters/types";
 import type { ExperimentRunReport } from "./types";
@@ -15,10 +15,11 @@ interface ResolvedBackend<TParameters extends ExperimentParameters> {
 async function resolveBackend<TParameters extends ExperimentParameters>(
   method: ExperimentMethodDefinition<TParameters>,
   requestedBackend: BackendId,
+  parameters: TParameters,
 ): Promise<ResolvedBackend<TParameters>> {
   const requested = method.backends[requestedBackend];
 
-  if (requested && method.supportedBackends.includes(requestedBackend)) {
+  if (requested && getMethodSupportedBackends(method, parameters).includes(requestedBackend)) {
     const availability = await checkBackendAvailability(requested);
     if (availability.available) {
       return { backend: requested };
@@ -43,7 +44,7 @@ async function resolveBackend<TParameters extends ExperimentParameters>(
     fallbackReason:
       requestedBackend === "cpu"
         ? undefined
-        : `${requestedBackend} is not implemented for this experiment.`,
+        : `${requestedBackend} is not supported for the selected strategy.`,
   };
 }
 
@@ -54,15 +55,18 @@ export async function runExperiment<TParameters extends ExperimentParameters>(
   parameters: TParameters,
   requestedBackend: BackendId,
   debugEnabled = false,
+  signal?: AbortSignal,
 ): Promise<ExperimentRunReport> {
   const totalStartedAt = performance.now();
   const method = getExperimentMethod(experiment, methodId);
   const { backend, fallbackReason } = await resolveBackend(
     method,
     requestedBackend,
+    parameters,
   );
+  if (signal?.aborted) throw new DOMException("Run was cancelled.", "AbortError");
   const processingStartedAt = performance.now();
-  const input = { source, parameters, methodId, debugEnabled };
+  const input = { source, parameters, methodId, debugEnabled, signal };
   let usedBackend = backend;
   let runtimeFallbackReason = fallbackReason;
   let output;
@@ -70,6 +74,9 @@ export async function runExperiment<TParameters extends ExperimentParameters>(
   try {
     output = await backend.run(input);
   } catch (backendError) {
+    if (signal?.aborted || (backendError instanceof Error && backendError.name === "AbortError")) {
+      throw backendError;
+    }
     const cpu = method.backends.cpu;
     if (backend.id === "cpu" || !cpu) throw backendError;
 
@@ -84,6 +91,7 @@ export async function runExperiment<TParameters extends ExperimentParameters>(
   return {
     output: output.output,
     debugViews: output.debugViews ?? [],
+    statistics: output.statistics,
     requestedBackend,
     usedBackend: usedBackend.id,
     fallbackReason: runtimeFallbackReason,
