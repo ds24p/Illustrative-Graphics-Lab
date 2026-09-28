@@ -190,6 +190,12 @@ export const screeningExperiment: ExperimentDefinition<ScreeningParameters> = {
       source.imageData.width,
       source.imageData.height,
     ),
+  listingImage: {
+    id: "screening-result",
+    label: "Screening result",
+    src: "/samples/screening-result.png",
+    alt: "A black-and-white screened still life made from a regular dot pattern.",
+  },
   sampleImages: [
     {
       id: "studio-still-life",

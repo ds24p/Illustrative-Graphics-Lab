@@ -1,14 +1,26 @@
 import type { ExperimentParameters } from "../../core/parameters/types";
+import type { ImageSource } from "../../core/images/types";
 
 export interface PainterlyParameters extends ExperimentParameters {
-  brushRadius: number;
+  brushSizes: string;
+  distanceMode: "radius" | "pixels";
   minStrokeLength: number;
   maxStrokeLength: number;
   stepFactor: number;
+  stepPixels: number;
   errorThreshold: number;
   gridFactor: number;
+  gridPixels: number;
   blurFactor: number;
-  directionSmoothing: number;
+  directionFollowing: number;
+  strokeOpacity: number;
+  colorJitter: number;
+  strokeRendering: "solid" | "textured";
+  brushType: "soft" | "flat" | "bristle" | "dry" | "rough" | "custom";
+  textureSpacing: number;
+  textureScale: number;
+  rotationOffset: number;
+  customBrush: ImageSource | null;
   seed: number;
   background: string;
 }
@@ -38,3 +50,11 @@ export interface PainterlyStroke {
   radius: number;
   opacity: number;
 }
+
+// Initialized once on white. drawLayer must preserve previously painted pixels.
+export interface PaintingSurface {
+  drawLayer(strokes: PainterlyStroke[]): void;
+  snapshot(): ImageData;
+}
+
+export type PaintingSurfaceFactory = (width: number, height: number) => PaintingSurface;

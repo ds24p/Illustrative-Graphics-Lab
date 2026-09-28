@@ -1,10 +1,10 @@
 import type { ExperimentResultRenderer } from "../../../core/rendering/types";
-import type { StrokeResult } from "../../../core/results/types";
-import type { PainterlyStroke } from "../types";
+import type { StrokeMark, StrokeResult } from "../../../core/results/types";
+import type { PainterlyStroke, PaintingSurfaceFactory } from "../types";
 
-export function solidStrokeResult(width: number, height: number, strokes: PainterlyStroke[]): StrokeResult {
+export function solidStrokeResult(width: number, height: number, strokes: PainterlyStroke[], background = "#ffffff"): StrokeResult {
   return {
-    kind: "strokes", width, height, background: "#ffffff",
+    kind: "strokes", width, height, background,
     strokes: strokes.map((stroke) => ({
       points: stroke.points,
       width: stroke.radius * 2,
@@ -15,19 +15,11 @@ export function solidStrokeResult(width: number, height: number, strokes: Painte
 }
 
 // Midpoint quadratic curves stay inside the control-point convex hull, including at image edges.
-// Generation never calls this renderer; a later textured renderer can consume the same strokes.
-export const renderSolidStrokes: ExperimentResultRenderer = (result, { canvas }) => {
-  if (result.kind !== "strokes") throw new Error("The solid brush renderer requires strokes.");
-  canvas.width = result.width;
-  canvas.height = result.height;
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("Your browser could not create a 2D canvas context.");
-  context.globalAlpha = 1;
-  context.fillStyle = result.background ?? "#ffffff";
-  context.fillRect(0, 0, result.width, result.height);
+// Does not clear the canvas: feedback painting, preview, and export use this same drawing code.
+export function drawSolidStrokes(context: CanvasRenderingContext2D, strokes: StrokeMark[]) {
   context.lineCap = "round";
   context.lineJoin = "round";
-  for (const stroke of result.strokes) {
+  for (const stroke of strokes) {
     if (!stroke.points.length || stroke.width <= 0) continue;
     context.strokeStyle = stroke.color;
     context.fillStyle = stroke.color;
@@ -51,4 +43,30 @@ export const renderSolidStrokes: ExperimentResultRenderer = (result, { canvas })
     context.stroke();
   }
   context.globalAlpha = 1;
+}
+
+export const renderSolidStrokes: ExperimentResultRenderer = (result, { canvas }) => {
+  if (result.kind !== "strokes") throw new Error("The solid brush renderer requires strokes.");
+  canvas.width = result.width;
+  canvas.height = result.height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Your browser could not create a 2D canvas context.");
+  context.globalAlpha = 1;
+  context.fillStyle = result.background ?? "#ffffff";
+  context.fillRect(0, 0, result.width, result.height);
+  drawSolidStrokes(context, result.strokes);
+};
+
+export const createSolidPaintingSurface: PaintingSurfaceFactory = (width, height) => {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error("Your browser could not create a 2D painting canvas.");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, width, height);
+  return {
+    drawLayer: (strokes) => drawSolidStrokes(context, solidStrokeResult(width, height, strokes).strokes),
+    snapshot: () => context.getImageData(0, 0, width, height),
+  };
 };

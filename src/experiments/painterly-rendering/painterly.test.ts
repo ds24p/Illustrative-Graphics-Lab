@@ -6,12 +6,16 @@ import { contourDirection, sobelGradients } from "./gradients";
 import { sourceRgb, whiteCanvas } from "./image";
 import { paintSingleScale } from "./methods/hertzmann/algorithm.cpu";
 import { hertzmannCpuBackend } from "./methods/hertzmann/backend.cpu";
-import { painterlyDefaults, resolvePainterlyParameters } from "./parameters";
+import { painterlyDefaults as multiScaleDefaults, resolveBrushTexture, resolveScaleParameters } from "./parameters";
+import * as solidRenderer from "./renderers/solid";
+import { createTestPaintingSurface } from "./testSurface";
 import { seededRandom, shuffleStrokes } from "./random";
 import { continuousDirection, generateStroke } from "./strokes";
 import type { GradientField } from "./types";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+const painterlyDefaults = { ...multiScaleDefaults, brushSizes: "8" };
 
 function source(width = 24, height = 24, pixel = (x: number, y: number) => [x * 5, y * 5, 20, 255]): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
@@ -25,7 +29,7 @@ function horizontalField(width: number, height: number): GradientField {
   return { width, height, gx: new Float32Array(width * height), gy: new Float32Array(width * height).fill(-1), magnitude: new Float32Array(width * height).fill(1) };
 }
 
-const options = { radius: 1, step: 1, minSegments: 4, maxSegments: 16, smoothing: 0.5 };
+const options = { radius: 1, step: 1, minSegments: 4, maxSegments: 16, directionFollowing: 0.5 };
 
 describe("painterly image processing", () => {
   it("composites transparent source pixels over white without mutating the source", () => {
@@ -90,8 +94,8 @@ describe("painterly image processing", () => {
 describe("curved stroke generation", () => {
   it("aligns reversed field directions before smoothing and normalizes the blend", () => {
     expect(continuousDirection({ x: -1, y: 0 }, { x: 1, y: 0 }, 0.5)).toEqual({ x: 1, y: 0 });
-    expect(continuousDirection({ x: 0, y: 1 }, { x: 1, y: 0 }, 0)).toEqual({ x: 0, y: 1 });
-    expect(continuousDirection({ x: 0, y: 1 }, { x: 1, y: 0 }, 1)).toEqual({ x: 1, y: 0 });
+    expect(continuousDirection({ x: 0, y: 1 }, { x: 1, y: 0 }, 0)).toEqual({ x: 1, y: 0 });
+    expect(continuousDirection({ x: 0, y: 1 }, { x: 1, y: 0 }, 1)).toEqual({ x: 0, y: 1 });
     const blend = continuousDirection({ x: 0, y: 1 }, { x: 1, y: 0 }, 0.5);
     expect(blend.x).toBeCloseTo(Math.SQRT1_2);
     expect(blend.y).toBeCloseTo(Math.SQRT1_2);
@@ -136,6 +140,29 @@ describe("curved stroke generation", () => {
     expect(stroke.points).toEqual([{ x: 1.5, y: 1.5 }, { x: 3.5, y: 1.5 }]);
   });
 
+  it("keeps color jitter deterministic, bounded, and inactive at zero", () => {
+    const image = sourceRgb(source(20, 20, () => [120, 80, 40, 255]));
+    const field = horizontalField(20, 20);
+    const zero = generateStroke({ x: 8.5, y: 8.5 }, image, whiteCanvas(20, 20), field,
+      { ...options, colorJitter: 0 }, seededRandom(12));
+    const first = generateStroke({ x: 8.5, y: 8.5 }, image, whiteCanvas(20, 20), field,
+      { ...options, colorJitter: 30 }, seededRandom(12));
+    const second = generateStroke({ x: 8.5, y: 8.5 }, image, whiteCanvas(20, 20), field,
+      { ...options, colorJitter: 30 }, seededRandom(12));
+    expect(zero.color).toEqual({ r: 120, g: 80, b: 40 });
+    expect(first).toEqual(second);
+    expect(first.color.r).toBeGreaterThanOrEqual(0); expect(first.color.r).toBeLessThanOrEqual(255);
+    expect(first.color.g).toBeGreaterThanOrEqual(0); expect(first.color.g).toBeLessThanOrEqual(255);
+    expect(first.color.b).toBeGreaterThanOrEqual(0); expect(first.color.b).toBeLessThanOrEqual(255);
+  });
+
+  it("respects minimum and maximum segment counts when a stroke can continue", () => {
+    const image = sourceRgb(source(80, 3, () => [0, 0, 0, 255]));
+    const stroke = generateStroke({ x: 1.5, y: 1.5 }, image, whiteCanvas(80, 3), horizontalField(80, 3),
+      { ...options, step: 1, minSegments: 2, maxSegments: 5 }, seededRandom(1));
+    expect(stroke.points).toHaveLength(6);
+  });
+
   it.each([[1, 1], [1, 8], [8, 1], [24, 24]])("handles flat %ix%i images with finite bounded strokes", (width, height) => {
     const input = source(width, height, () => [0, 0, 0, 255]);
     const run = paintSingleScale(input, painterlyDefaults);
@@ -175,13 +202,23 @@ describe("single-scale integration", () => {
   });
 
   it("derives distances from radius and rejects invalid settings before processing", () => {
-    expect(resolvePainterlyParameters({ ...painterlyDefaults, brushRadius: 12 })).toMatchObject({ step: 12, gridSpacing: 12, sigma: 6 });
+    expect(resolveScaleParameters(painterlyDefaults, 12)).toMatchObject({ step: 12, gridSpacing: 12, sigma: 6 });
     expect(() => paintSingleScale(source(), { ...painterlyDefaults, minStrokeLength: 20 })).toThrow(/Minimum stroke length/);
-    for (const [key, value] of Object.entries({ seed: -1, stepFactor: 0, gridFactor: NaN, directionSmoothing: 2, brushRadius: Infinity, maxStrokeLength: 2.5 })) {
+    for (const [key, value] of Object.entries({ seed: -1, stepFactor: 0, gridFactor: NaN, directionSmoothing: 2, brushSizes: "Infinity", maxStrokeLength: 2.5 })) {
       expect(() => paintSingleScale(source(), { ...painterlyDefaults, [key]: value })).toThrow();
     }
     expect(() => paintSingleScale(source(0, 0), painterlyDefaults)).toThrow(/nonempty/);
-    expect(() => paintSingleScale(source(450, 450), { ...painterlyDefaults, brushRadius: 1 })).toThrow(/200,000 cells/);
+    expect(() => paintSingleScale(source(450, 450), { ...painterlyDefaults, brushSizes: "1" })).toThrow(/200,000 cells/);
+  });
+
+  it("keeps stroke generation independent from solid or textured rendering", () => {
+    const solid = paintSingleScale(source(), { ...painterlyDefaults, strokeRendering: "solid" });
+    const textured = paintSingleScale(source(), { ...painterlyDefaults, strokeRendering: "textured" });
+    expect(textured.strokes).toEqual(solid.strokes);
+    expect(resolveBrushTexture({ ...painterlyDefaults, strokeRendering: "solid" })).toBeUndefined();
+    const texture = resolveBrushTexture({ ...painterlyDefaults, strokeRendering: "textured", brushType: "bristle" });
+    expect(texture?.type).toBe("bristle");
+    expect(texture?.mask.data.every((value) => value >= 0 && value <= 1)).toBe(true);
   });
 
   it("registers only CPU and produces all advertised debug views without changing the painting", async () => {
@@ -189,15 +226,16 @@ describe("single-scale integration", () => {
       constructor(public data: Uint8ClampedArray, public width: number, public height: number) {}
     });
     const input = { source: { id: "test", name: "test", previewUrl: "", imageData: source() }, parameters: painterlyDefaults, methodId: "hertzmann" };
+    vi.spyOn(solidRenderer, "createSolidPaintingSurface").mockImplementation(createTestPaintingSurface);
     const plain = await hertzmannCpuBackend.run({ ...input, debugEnabled: false });
     const debug = await hertzmannCpuBackend.run({ ...input, debugEnabled: true });
     expect(painterlyRenderingExperiment.metadata.id).toBe("painterly-rendering");
     expect(painterlyRenderingExperiment.methods[0].supportedBackends).toEqual(["cpu"]);
     expect(debug.output).toEqual(plain.output);
     expect(plain.debugViews).toBeUndefined();
-    expect(debug.debugViews?.map(({ id }) => id)).toEqual(painterlyRenderingExperiment.methods[0].debugViews?.map(({ id }) => id));
-    expect(debug.debugViews).toHaveLength(6);
-    expect(debug.debugViews?.at(-1)?.result).toBe(debug.output);
+    expect(debug.debugViews?.map(({ definitionId }) => definitionId)).toEqual(painterlyRenderingExperiment.methods[0].debugViews?.map(({ id }) => id));
+    expect(debug.debugViews).toHaveLength(9);
+    expect(debug.debugViews?.every(({ group }) => group === "8 px")).toBe(true);
     if (debug.output.kind !== "strokes") throw new Error("Expected strokes.");
     expect(debug.output.strokes.every((stroke) => stroke.width === 16 && stroke.opacity === 1)).toBe(true);
     expect(debug.output.background).toBe("#ffffff");

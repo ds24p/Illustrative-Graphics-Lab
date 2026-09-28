@@ -68,6 +68,16 @@ export interface StrokeMark {
   texture?: StrokeTexture;
 }
 
+export interface StrokeTextureConfig {
+  type: string;
+  maskWidth: number;
+  maskHeight: number;
+  mask: ArrayLike<number>;
+  textureSpacing: number;
+  textureScale: number;
+  rotationOffset: number;
+}
+
 export interface PolygonMark {
   points: Array<{ x: number; y: number }>;
   fill: string;
@@ -90,6 +100,7 @@ export interface StrokeResult {
   height: number;
   strokes: StrokeMark[];
   background?: string;
+  texture?: StrokeTextureConfig;
 }
 
 export type ExperimentResult =
@@ -106,6 +117,8 @@ export interface DebugView {
   id: string;
   label: string;
   group?: string;
+  // Several groups can expose the same kind of view with unique instance IDs.
+  definitionId?: string;
   result: ExperimentResult;
 }
 

@@ -4,9 +4,10 @@ import { ExperimentCard } from "../components/experiments/ExperimentCard";
 import { experiments } from "../experiments/registry";
 
 export function HomePage() {
-  const heroSample = experiments.find(
-    (experiment) => experiment.sampleImages.length > 0,
-  )?.sampleImages[0];
+  const heroExperiment = experiments.find(
+    (experiment) => experiment.listingImage ?? experiment.sampleImages[0],
+  );
+  const heroSample = heroExperiment?.listingImage ?? heroExperiment?.sampleImages[0];
   const methodCount = experiments.reduce(
     (total, experiment) => total + experiment.methods.length,
     0,

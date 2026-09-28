@@ -101,6 +101,12 @@ export const ditheringExperiment: ExperimentDefinition<DitheringParameters> = {
     customPalette: ["#1b2a41", "#3f8c8e", "#e9a03b", "#d95d39"],
     paletteSize: 8,
   },
+  listingImage: {
+    id: "dithering-result",
+    label: "Dithering result",
+    src: "/samples/dithering-result.png",
+    alt: "A monochrome dithered still life made from fine diagonal marks.",
+  },
   sampleImages: [
     {
       id: "studio-still-life",

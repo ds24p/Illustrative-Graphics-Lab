@@ -8,15 +8,33 @@ export interface StrokeOptions {
   step: number;
   minSegments: number;
   maxSegments: number;
-  smoothing: number;
+  directionFollowing?: number;
+  /** @deprecated Phase 1B alias. Values are interpreted as 1 - directionFollowing. */
+  smoothing?: number;
+  opacity?: number;
+  colorJitter?: number;
 }
 
-export function continuousDirection(local: Point, previous: Point, smoothing: number): Point {
+/** Blend the previous path direction with the local contour direction.
+ * alpha=0 continues straight; alpha=1 follows the contour field.
+ */
+export function continuousDirection(local: Point, previous: Point, directionFollowing: number): Point {
   const sign = local.x * previous.x + local.y * previous.y < 0 ? -1 : 1;
-  const x = smoothing * previous.x + (1 - smoothing) * sign * local.x;
-  const y = smoothing * previous.y + (1 - smoothing) * sign * local.y;
+  const alpha = Math.max(0, Math.min(1, directionFollowing));
+  const x = (1 - alpha) * previous.x + alpha * sign * local.x;
+  const y = (1 - alpha) * previous.y + alpha * sign * local.y;
   const length = Math.hypot(x, y);
   return length > 1e-8 ? { x: x / length, y: y / length } : previous;
+}
+
+function jitteredColor(color: ReturnType<typeof sampleColor>, amount: number, random: () => number) {
+  if (amount <= 0) return color;
+  const clamp = (value: number) => Math.max(0, Math.min(255, value));
+  return {
+    r: clamp(color.r + (random() * 2 - 1) * amount),
+    g: clamp(color.g + (random() * 2 - 1) * amount),
+    b: clamp(color.b + (random() * 2 - 1) * amount),
+  };
 }
 
 // Clip a segment to the pixel-center rectangle. No out-of-bounds points or duplicate endpoints.
@@ -30,8 +48,8 @@ function availableStep(point: Point, direction: Point, step: number, width: numb
 }
 
 export function generateStroke(seed: Point, reference: RgbImage, canvas: RgbImage, field: GradientField, options: StrokeOptions, random: () => number): PainterlyStroke {
-  const color = sampleColor(reference, seed.x, seed.y);
-  const stroke: PainterlyStroke = { points: [{ ...seed }], color, radius: options.radius, opacity: 1 };
+  const color = jitteredColor(sampleColor(reference, seed.x, seed.y), options.colorJitter ?? 0, random);
+  const stroke: PainterlyStroke = { points: [{ ...seed }], color, radius: options.radius, opacity: options.opacity ?? 1 };
   let direction = contourDirection(field, seed);
   if (!direction) {
     const angle = random() * Math.PI * 2;
@@ -43,7 +61,10 @@ export function generateStroke(seed: Point, reference: RgbImage, canvas: RgbImag
   for (let segment = 0; segment < options.maxSegments; segment++) {
     const current = stroke.points[stroke.points.length - 1];
     const local = contourDirection(field, current);
-    if (local) direction = continuousDirection(local, direction, options.smoothing);
+    if (local) {
+      const following = options.directionFollowing ?? (options.smoothing === undefined ? 0.5 : 1 - options.smoothing);
+      direction = continuousDirection(local, direction, following);
+    }
     // At a flat sample, retain the last valid (or seeded initial) direction.
     const step = availableStep(current, direction, options.step, reference.width, reference.height);
     if (step < 1e-6) break;

@@ -33,6 +33,35 @@ function renderPoints(result: PointResult, canvas: HTMLCanvasElement) {
   context.globalAlpha = 1;
 }
 
+function renderPaths(result: Extract<ExperimentResult, { kind: "paths" }>, canvas: HTMLCanvasElement) {
+  canvas.width = result.width;
+  canvas.height = result.height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Your browser could not create a 2D canvas context.");
+  context.fillStyle = result.background ?? "#fff";
+  context.fillRect(0, 0, result.width, result.height);
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  for (const path of result.paths) {
+    if (!path.points.length) continue;
+    context.beginPath();
+    context.moveTo(path.points[0].x, path.points[0].y);
+    for (const point of path.points.slice(1)) context.lineTo(point.x, point.y);
+    if (path.closed) context.closePath();
+    context.globalAlpha = path.opacity ?? 1;
+    if (path.fill) {
+      context.fillStyle = path.fill;
+      context.fill();
+    }
+    if (path.stroke && (path.width ?? 1) > 0) {
+      context.strokeStyle = path.stroke;
+      context.lineWidth = path.width ?? 1;
+      context.stroke();
+    }
+  }
+  context.globalAlpha = 1;
+}
+
 export function renderExperimentResult(
   result: ExperimentResult,
   canvas: HTMLCanvasElement,
@@ -51,6 +80,11 @@ export function renderExperimentResult(
 
   if (result.kind === "points") {
     renderPoints(result, canvas);
+    return;
+  }
+
+  if (result.kind === "paths") {
+    renderPaths(result, canvas);
     return;
   }
 

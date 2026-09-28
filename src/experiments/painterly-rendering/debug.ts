@@ -1,5 +1,9 @@
 import type { DebugViewDefinition } from "../../core/experiments/types";
-import type { DebugView, RasterResult, StrokeResult } from "../../core/results/types";
+import type { DebugView, PathResult, RasterResult } from "../../core/results/types";
+import { solidStrokeResult } from "./renderers/solid";
+import { texturedStrokeResult } from "./renderers/textured";
+import type { BrushTextureConfig } from "./brushes";
+import { generateBrushMask } from "./brushes";
 import { MAX_RGB_ERROR } from "./error";
 import { contourDirection } from "./gradients";
 import { rgbImageData } from "./image";
@@ -9,9 +13,12 @@ export const painterlyDebugViews: DebugViewDefinition[] = [
   { id: "blurred-reference", label: "Blurred Reference", description: "Gaussian-blurred source RGB, with transparency composited over white." },
   { id: "gradient-magnitude", label: "Gradient Magnitude", description: "Sobel magnitude of Processing brightness max(R,G,B)/255. Display scaled to this image's maximum." },
   { id: "stroke-direction-field", label: "Stroke Direction Field", description: "Sparse teal arrows follow normalize(−Iy, Ix), along contours. The gradient points across edges. Flat regions have no arrow." },
-  { id: "error-map", label: "Error Map", description: "Initial reference-to-white squared RGB error, before this single layer is painted. Black = 0; white = 195075." },
+  { id: "error-before-layer", label: "Error Before Layer", description: "Squared RGB error against the current painting before this scale. Black = 0; white = 195075. Later scales include all earlier layers." },
   { id: "stroke-seeds", label: "Stroke Seeds", description: "Red marks show the maximum-error pixel chosen in each cell whose mean error exceeds the threshold." },
-  { id: "final-painting", label: "Final Painting", description: "The same solid curved strokes and seeded drawing order as the output." },
+  { id: "canvas-after-layer", label: "Canvas After Layer", description: "Cumulative painting after this scale, including all earlier, larger brushes." },
+  { id: "stroke-paths", label: "Stroke Paths", description: "Centerlines of generated strokes with red seed markers. Geometry is shown independently of brush thickness." },
+  { id: "layer-strokes-only", label: "Layer Strokes Only", description: "Only this scale's new strokes on a neutral background. Smaller brushes are placed where residual error exceeds the threshold." },
+  { id: "brush-mask", label: "Brush Mask", description: "The selected procedural or uploaded coverage mask. Black = M 0; white = M 1." },
 ];
 
 function scalarRaster(values: Float32Array, width: number, height: number, maximum: number): RasterResult {
@@ -57,7 +64,36 @@ function directionRaster(run: PainterlyRun): RasterResult {
   return { kind: "raster", imageData };
 }
 
-export function createPainterlyDebugViews(run: PainterlyRun, output: StrokeResult): DebugView[] {
+function strokePaths(run: PainterlyRun): PathResult {
+  const paths: PathResult["paths"] = [];
+  for (const stroke of run.strokes) {
+    if (!stroke.points.length) continue;
+    paths.push({ points: stroke.points, stroke: "#08777a", width: 1.5, opacity: 0.88 });
+    const start = stroke.points[0];
+    const radius = Math.max(1.5, Math.min(4, run.settings.brushRadius * 0.16));
+    const marker: Array<{ x: number; y: number }> = [];
+    for (let i = 0; i < 8; i++) {
+      const angle = i * Math.PI / 4;
+      marker.push({ x: start.x + Math.cos(angle) * radius, y: start.y + Math.sin(angle) * radius });
+    }
+    paths.push({ points: marker, closed: true, fill: "#e62f4a", stroke: "#7c1328", width: 0.75, opacity: 0.92 });
+  }
+  return { kind: "paths", width: run.reference.width, height: run.reference.height, background: "#f6f3e8", paths };
+}
+
+function brushMaskRaster(texture?: BrushTextureConfig): RasterResult {
+  const fallback = texture ?? { mask: generateBrushMask("soft", 64, 64, 12345) };
+  const width = fallback.mask.width;
+  const height = fallback.mask.height;
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let i = 0; i < width * height; i++) {
+    const shade = Math.round(Math.max(0, Math.min(1, fallback.mask.data[i] ?? 0)) * 255);
+    data[i * 4] = shade; data[i * 4 + 1] = shade; data[i * 4 + 2] = shade; data[i * 4 + 3] = 255;
+  }
+  return { kind: "raster", imageData: new ImageData(data, width, height) };
+}
+
+export function createPainterlyDebugViews(run: PainterlyRun, canvasAfter: ImageData, texture?: BrushTextureConfig): DebugView[] {
   const { width, height } = run.reference;
   let maxGradient = 0;
   for (const value of run.field.magnitude) maxGradient = Math.max(maxGradient, value);
@@ -75,7 +111,14 @@ export function createPainterlyDebugViews(run: PainterlyRun, output: StrokeResul
     directionRaster(run),
     scalarRaster(run.errors, width, height, MAX_RGB_ERROR),
     { kind: "raster" as const, imageData: seeds },
-    output,
+    { kind: "raster" as const, imageData: canvasAfter },
+    strokePaths(run),
+    texture ? texturedStrokeResult(width, height, run.strokes, texture, "#eeeeea") : solidStrokeResult(width, height, run.strokes, "#eeeeea"),
+    brushMaskRaster(texture),
   ];
-  return painterlyDebugViews.map(({ id, label }, i) => ({ id, label, result: results[i] }));
+  const radius = run.settings.brushRadius;
+  return painterlyDebugViews.map(({ id, label }, i) => ({
+    id: `${radius}-${id}`, definitionId: id, group: `${radius} px`,
+    label: `${label} (${radius} px)`, result: results[i],
+  }));
 }

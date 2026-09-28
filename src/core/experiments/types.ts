@@ -87,6 +87,7 @@ export interface ExperimentMethodDefinition<
   defaultBackend: BackendId;
   backends: Partial<Record<BackendId, ExperimentBackend<TParameters>>>;
   debugViews?: DebugViewDefinition[];
+  debugSelection?: { groupLabel: string; viewLabel: string; initialViewId?: string };
 }
 
 export interface ExperimentDefinition<
@@ -97,6 +98,8 @@ export interface ExperimentDefinition<
   parameters: ParameterDefinition[];
   defaultParameters: TParameters;
   sourceParameterDefaults?: (source: ImageSource) => Partial<TParameters>;
+  /** Image shown in experiment cards and the home-page gallery. */
+  listingImage?: SampleImageDefinition;
   sampleImages: SampleImageDefinition[];
   methods: ExperimentMethodDefinition<TParameters>[];
   defaultMethodId: string;

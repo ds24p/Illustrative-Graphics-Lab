@@ -23,8 +23,18 @@ export type ParameterVisibilityRule =
 interface BaseParameterDefinition {
   key: string;
   label: string;
+  group?: string;
   description?: string;
   visibleWhen?: ParameterVisibilityRule;
+}
+
+export interface NumberListParameterDefinition extends BaseParameterDefinition {
+  kind: "number-list";
+  defaultValue: string;
+  min: number;
+  max: number;
+  maxItems: number;
+  unit?: string;
 }
 
 export interface NumberParameterDefinition extends BaseParameterDefinition {
@@ -104,6 +114,7 @@ export interface ColorListParameterDefinition extends BaseParameterDefinition {
 }
 
 export type ParameterDefinition =
+  | NumberListParameterDefinition
   | NumberParameterDefinition
   | IntegerParameterDefinition
   | RangeParameterDefinition

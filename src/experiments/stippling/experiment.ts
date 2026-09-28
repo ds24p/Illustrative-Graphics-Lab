@@ -43,6 +43,12 @@ export const stipplingExperiment: ExperimentDefinition<StipplingParameters> = {
     lloydMode: "weighted",
     removeNearWhite: true,
   },
+  listingImage: {
+    id: "stippling-result",
+    label: "Stippling result",
+    src: "/samples/stippling-result.png",
+    alt: "A black-and-white still life built from many stippling dots.",
+  },
   sampleImages: [
     {
       id: "studio-still-life",

@@ -9,7 +9,7 @@ interface ExperimentCardProps {
 }
 
 export function ExperimentCard({ experiment }: ExperimentCardProps) {
-  const sample = experiment.sampleImages[0];
+  const sample = experiment.listingImage ?? experiment.sampleImages[0];
   const backendCount = getExperimentSupportedBackends(experiment).length;
 
   return (

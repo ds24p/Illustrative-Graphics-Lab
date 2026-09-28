@@ -444,6 +444,7 @@ function ExperimentWorkspace({ experiment }: ExperimentWorkspaceProps) {
             views={displayedDebugViews}
             renderers={experiment.renderers}
             definitions={debugViewDefinitions}
+            selection={method.debugSelection}
           />
         </section>
 

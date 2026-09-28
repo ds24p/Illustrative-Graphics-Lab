@@ -10,6 +10,9 @@ import type {
   ParameterValue,
 } from "../../core/parameters/types";
 import { isParameterVisible } from "../../core/parameters/visibility";
+import { normalizeNumberList } from "../../core/parameters/numberList";
+import { BrushMaskPreview } from "./BrushMaskPreview";
+import type { BrushType } from "../../experiments/painterly-rendering/brushes";
 
 interface ParameterPanelProps {
   definitions: ParameterDefinition[];
@@ -177,196 +180,197 @@ export function ParameterPanel({
     onChange({ ...values, [key]: value });
   };
 
+  const renderDefinition = (definition: ParameterDefinition) => {
+    const value = values[definition.key] ?? definition.defaultValue;
+
+    if (definition.kind === "number-list") {
+      let normalized: string | undefined;
+      let error: string | undefined;
+      try {
+        normalized = normalizeNumberList(String(value), definition)
+          .map((number) => `${number}${definition.unit ? ` ${definition.unit}` : ""}`).join(" → ");
+      } catch (problem) {
+        error = problem instanceof Error ? problem.message : "Enter a valid list.";
+      }
+      return (
+        <label className="field-group" key={definition.key}>
+          <span className="field-label">{definition.label}</span>
+          <input className="number-input" type="text" value={String(value)}
+            aria-label={definition.label} aria-invalid={Boolean(error)}
+            onChange={(event) => update(definition.key, event.target.value)} />
+          {normalized && <small>Actual order: {normalized}</small>}
+          {error && <small className="parameter-error" role="alert">{error}</small>}
+          {definition.description && <small>{definition.description}</small>}
+        </label>
+      );
+    }
+
+    if (definition.kind === "image-select") {
+      return (
+        <ImageSelectField
+          key={definition.key}
+          definition={definition}
+          value={value}
+          values={values}
+          onChange={(nextValue) => update(definition.key, nextValue)}
+        />
+      );
+    }
+
+    if (definition.kind === "image") {
+      return (
+        <ImageUploadField
+          key={definition.key}
+          definition={definition}
+          value={value}
+          onChange={(nextValue) => update(definition.key, nextValue)}
+        />
+      );
+    }
+
+    if (definition.kind === "color-list") {
+      const colors = Array.isArray(value) ? value : definition.defaultValue;
+      const minimum = definition.minItems ?? 1;
+      const maximum = definition.maxItems ?? 16;
+
+      return (
+        <div className="field-group" key={definition.key}>
+          <span className="field-label">{definition.label}</span>
+          <div className="color-list">
+            {colors.map((color, index) => (
+              <div className="color-list-row" key={`${index}-${color}`}>
+                <input
+                  type="color"
+                  value={color}
+                  aria-label={`${definition.label} color ${index + 1}`}
+                  onChange={(event) => {
+                    const nextColors = [...colors];
+                    nextColors[index] = event.target.value;
+                    update(definition.key, nextColors);
+                  }}
+                />
+                <code>{color.toUpperCase()}</code>
+                <button
+                  className="palette-remove-button"
+                  type="button"
+                  aria-label={`Remove color ${index + 1}`}
+                  title={`Remove color ${index + 1}`}
+                  disabled={colors.length <= minimum}
+                  onClick={() => update(definition.key, colors.filter((_, colorIndex) => colorIndex !== index))}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            className="color-list-add"
+            type="button"
+            disabled={colors.length >= maximum}
+            onClick={() => update(definition.key, [...colors, definition.defaultNewColor ?? "#000000"])}
+          >
+            <Plus size={16} /> Add color
+          </button>
+          {definition.description && <small>{definition.description}</small>}
+        </div>
+      );
+    }
+
+    if (definition.kind === "select") {
+      return (
+        <label className="field-group" key={definition.key}>
+          <span className="field-label">{definition.label}</span>
+          <select value={String(value)} onChange={(event) => update(definition.key, event.target.value)}>
+            {definition.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+          {definition.description && <small>{definition.description}</small>}
+        </label>
+      );
+    }
+
+    if (definition.kind === "number" || definition.kind === "integer") {
+      return (
+        <label className="field-group" key={definition.key}>
+          <span className="field-label">{definition.label}</span>
+          <input
+            className="number-input"
+            type="number"
+            min={definition.min}
+            max={definition.max}
+            step={definition.kind === "integer" ? definition.step ?? 1 : definition.step}
+            value={Number(value)}
+            onChange={(event) => {
+              const enteredValue = Number(event.target.value);
+              let nextValue = definition.kind === "integer" ? Math.round(enteredValue) : enteredValue;
+              if (definition.min !== undefined) nextValue = Math.max(definition.min, nextValue);
+              if (definition.max !== undefined) nextValue = Math.min(definition.max, nextValue);
+              update(definition.key, nextValue);
+            }}
+          />
+          {definition.description && <small>{definition.description}</small>}
+        </label>
+      );
+    }
+
+    if (definition.kind === "range") {
+      const numberValue = Number(value);
+      return (
+        <label className="field-group" key={definition.key}>
+          <span className="field-label field-label-split">
+            {definition.label}
+            <output>{definition.formatValue?.(numberValue) ?? displayNumber(numberValue, definition.format)}</output>
+          </span>
+          <input type="range" min={definition.min} max={definition.max} step={definition.step} value={numberValue}
+            onChange={(event) => update(definition.key, Number(event.target.value))} />
+          {definition.description && <small>{definition.description}</small>}
+        </label>
+      );
+    }
+
+    if (definition.kind === "boolean") {
+      return (
+        <label className="toggle-field" key={definition.key}>
+          <span>
+            <span className="field-label">{definition.label}</span>
+            {definition.description && <small>{definition.description}</small>}
+          </span>
+          <input type="checkbox" checked={Boolean(value)} onChange={(event) => update(definition.key, event.target.checked)} />
+          <span className="toggle-track" aria-hidden="true" />
+        </label>
+      );
+    }
+
+    return (
+      <label className="field-group" key={definition.key}>
+        <span className="field-label">{definition.label}</span>
+        <input type="color" value={String(value)} onChange={(event) => update(definition.key, event.target.value)} />
+      </label>
+    );
+  };
+
+  const visibleDefinitions = definitions.filter((definition) => isParameterVisible(definition, values));
+  const groups: Array<{ label?: string; definitions: ParameterDefinition[] }> = [];
+  visibleDefinitions.forEach((definition) => {
+    const current = groups.at(-1);
+    if (!current || current.label !== definition.group) groups.push({ label: definition.group, definitions: [definition] });
+    else current.definitions.push(definition);
+  });
+
   return (
     <div className="parameter-list">
-      {definitions.filter((definition) => isParameterVisible(definition, values)).map((definition) => {
-        const value = values[definition.key] ?? definition.defaultValue;
-
-        if (definition.kind === "image-select") {
-          return (
-            <ImageSelectField
-              key={definition.key}
-              definition={definition}
-              value={value}
-              values={values}
-              onChange={(nextValue) => update(definition.key, nextValue)}
-            />
-          );
-        }
-
-        if (definition.kind === "image") {
-          return (
-            <ImageUploadField
-              key={definition.key}
-              definition={definition}
-              value={value}
-              onChange={(nextValue) => update(definition.key, nextValue)}
-            />
-          );
-        }
-
-        if (definition.kind === "color-list") {
-          const colors = Array.isArray(value) ? value : definition.defaultValue;
-          const minimum = definition.minItems ?? 1;
-          const maximum = definition.maxItems ?? 16;
-
-          return (
-            <div className="field-group" key={definition.key}>
-              <span className="field-label">{definition.label}</span>
-              <div className="color-list">
-                {colors.map((color, index) => (
-                  <div className="color-list-row" key={`${index}-${color}`}>
-                    <input
-                      type="color"
-                      value={color}
-                      aria-label={`${definition.label} color ${index + 1}`}
-                      onChange={(event) => {
-                        const nextColors = [...colors];
-                        nextColors[index] = event.target.value;
-                        update(definition.key, nextColors);
-                      }}
-                    />
-                    <code>{color.toUpperCase()}</code>
-                    <button
-                      className="palette-remove-button"
-                      type="button"
-                      aria-label={`Remove color ${index + 1}`}
-                      title={`Remove color ${index + 1}`}
-                      disabled={colors.length <= minimum}
-                      onClick={() =>
-                        update(
-                          definition.key,
-                          colors.filter((_, colorIndex) => colorIndex !== index),
-                        )
-                      }
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <button
-                className="color-list-add"
-                type="button"
-                disabled={colors.length >= maximum}
-                onClick={() =>
-                  update(definition.key, [
-                    ...colors,
-                    definition.defaultNewColor ?? "#000000",
-                  ])
-                }
-              >
-                <Plus size={16} /> Add color
-              </button>
-              {definition.description && <small>{definition.description}</small>}
-            </div>
-          );
-        }
-
-        if (definition.kind === "select") {
-          return (
-            <label className="field-group" key={definition.key}>
-              <span className="field-label">{definition.label}</span>
-              <select
-                value={String(value)}
-                onChange={(event) => update(definition.key, event.target.value)}
-              >
-                {definition.options.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              {definition.description && <small>{definition.description}</small>}
-            </label>
-          );
-        }
-
-        if (definition.kind === "number" || definition.kind === "integer") {
-          return (
-            <label className="field-group" key={definition.key}>
-              <span className="field-label">{definition.label}</span>
-              <input
-                className="number-input"
-                type="number"
-                min={definition.min}
-                max={definition.max}
-                step={definition.kind === "integer" ? definition.step ?? 1 : definition.step}
-                value={Number(value)}
-                onChange={(event) => {
-                  const enteredValue = Number(event.target.value);
-                  let nextValue =
-                    definition.kind === "integer"
-                      ? Math.round(enteredValue)
-                      : enteredValue;
-                  if (definition.min !== undefined) {
-                    nextValue = Math.max(definition.min, nextValue);
-                  }
-                  if (definition.max !== undefined) {
-                    nextValue = Math.min(definition.max, nextValue);
-                  }
-                  update(definition.key, nextValue);
-                }}
-              />
-              {definition.description && <small>{definition.description}</small>}
-            </label>
-          );
-        }
-
-        if (definition.kind === "range") {
-          const numberValue = Number(value);
-          return (
-            <label className="field-group" key={definition.key}>
-              <span className="field-label field-label-split">
-                {definition.label}
-                <output>
-                  {definition.formatValue?.(numberValue) ??
-                    displayNumber(numberValue, definition.format)}
-                </output>
-              </span>
-              <input
-                type="range"
-                min={definition.min}
-                max={definition.max}
-                step={definition.step}
-                value={numberValue}
-                onChange={(event) =>
-                  update(definition.key, Number(event.target.value))
-                }
-              />
-              {definition.description && <small>{definition.description}</small>}
-            </label>
-          );
-        }
-
-        if (definition.kind === "boolean") {
-          return (
-            <label className="toggle-field" key={definition.key}>
-              <span>
-                <span className="field-label">{definition.label}</span>
-                {definition.description && <small>{definition.description}</small>}
-              </span>
-              <input
-                type="checkbox"
-                checked={Boolean(value)}
-                onChange={(event) => update(definition.key, event.target.checked)}
-              />
-              <span className="toggle-track" aria-hidden="true" />
-            </label>
-          );
-        }
-
-        return (
-          <label className="field-group" key={definition.key}>
-            <span className="field-label">{definition.label}</span>
-            <input
-              type="color"
-              value={String(value)}
-              onChange={(event) => update(definition.key, event.target.value)}
-            />
-          </label>
-        );
-      })}
+      {groups.map((group, index) => (
+        <section className="parameter-group" key={`${group.label ?? "ungrouped"}-${index}`}>
+          {group.label && <h3>{group.label}</h3>}
+          <div className="parameter-group-fields">{group.definitions.map(renderDefinition)}</div>
+        </section>
+      ))}
+      {values.strokeRendering === "textured" && typeof values.brushType === "string" && (
+        <BrushMaskPreview
+          brushType={values.brushType as BrushType}
+          seed={typeof values.seed === "number" ? values.seed : 12345}
+          customBrush={values.customBrush && typeof values.customBrush === "object" && "imageData" in values.customBrush ? values.customBrush : null}
+        />
+      )}
     </div>
   );
 }

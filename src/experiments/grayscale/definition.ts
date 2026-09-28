@@ -45,6 +45,12 @@ export const grayscaleExperiment: ExperimentDefinition<GrayscaleParameters> = {
     intensity: 1,
     preserveAlpha: true,
   },
+  listingImage: {
+    id: "grayscale-result",
+    label: "Grayscale result",
+    src: "/samples/grayscale-result.png",
+    alt: "A grayscale still life with a flower, vase, cube, fabric, and drawing.",
+  },
   sampleImages: [
     {
       id: "studio-still-life",
