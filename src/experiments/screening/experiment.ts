@@ -1,4 +1,5 @@
 import type { ExperimentDefinition } from "../../core/experiments/types";
+import { publicUrl } from "../../core/assets/publicUrl";
 import {
   cmykClusteredDotEducation,
   crossEducation,
@@ -193,14 +194,14 @@ export const screeningExperiment: ExperimentDefinition<ScreeningParameters> = {
   listingImage: {
     id: "screening-result",
     label: "Screening result",
-    src: "/samples/screening-result.png",
+    src: publicUrl("samples/screening-result.png"),
     alt: "A black-and-white screened still life made from a regular dot pattern.",
   },
   sampleImages: [
     {
       id: "studio-still-life",
       label: "Studio still life",
-      src: "/samples/grayscale-still-life.png",
+      src: publicUrl("samples/grayscale-still-life.png"),
       alt: "A colorful still life with a broad Processing-brightness range.",
     },
   ],

@@ -1,3 +1,4 @@
+import { publicUrl } from "../core/assets/publicUrl";
 import { comparePointResults } from "../core/results/comparePointResults";
 import type { ImageSource } from "../core/images/types";
 import { stipplingExperiment } from "../experiments/stippling/experiment";
@@ -104,7 +105,7 @@ async function controlledCases() {
 
 async function createSource(width: number, height: number): Promise<ImageSource> {
   const sample = new Image();
-  sample.src = "/samples/grayscale-still-life.png";
+  sample.src = publicUrl("samples/grayscale-still-life.png");
   await sample.decode();
   const canvas = document.createElement("canvas");
   canvas.width = width;

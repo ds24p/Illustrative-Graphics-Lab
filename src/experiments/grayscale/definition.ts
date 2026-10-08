@@ -1,4 +1,5 @@
 import type { ExperimentDefinition } from "../../core/experiments/types";
+import { publicUrl } from "../../core/assets/publicUrl";
 import { createGrayscaleCpuBackend } from "./backend.cpu";
 import type { GrayscaleParameters } from "./types";
 
@@ -48,14 +49,14 @@ export const grayscaleExperiment: ExperimentDefinition<GrayscaleParameters> = {
   listingImage: {
     id: "grayscale-result",
     label: "Grayscale result",
-    src: "/samples/grayscale-result.png",
+    src: publicUrl("samples/grayscale-result.png"),
     alt: "A grayscale still life with a flower, vase, cube, fabric, and drawing.",
   },
   sampleImages: [
     {
       id: "studio-still-life",
       label: "Studio still life",
-      src: "/samples/grayscale-still-life.png",
+      src: publicUrl("samples/grayscale-still-life.png"),
       alt: "A colorful still life with a blue vase, yellow flower, red cube, teal fabric, and charcoal drawing.",
     },
   ],

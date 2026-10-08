@@ -1,4 +1,5 @@
 import type { ExperimentDefinition } from "../../core/experiments/types";
+import { publicUrl } from "../../core/assets/publicUrl";
 import { painterlyDebugViews } from "./debug";
 import { hertzmannEducation } from "./education";
 import { hertzmannCpuBackend } from "./methods/hertzmann/backend.cpu";
@@ -22,11 +23,11 @@ export const painterlyRenderingExperiment: ExperimentDefinition<PainterlyParamet
   parameters: [],
   defaultParameters: painterlyDefaults,
   listingImage: {
-    id: "painterly-rendering-result", label: "Painterly rendering result", src: "/samples/painterly-rendering-result.png",
+    id: "painterly-rendering-result", label: "Painterly rendering result", src: publicUrl("samples/painterly-rendering-result.png"),
     alt: "A colorful still life rendered with painterly brush strokes.",
   },
   sampleImages: [{
-    id: "studio-still-life", label: "Studio still life", src: "/samples/grayscale-still-life.png",
+    id: "studio-still-life", label: "Studio still life", src: publicUrl("samples/grayscale-still-life.png"),
     alt: "A colorful still life with curved objects and contrasting edges.",
   }],
   methodSelection: { label: "Painterly algorithm", description: "Strategy: one multi-scale stroke generator with Solid or procedural Textured rendering (Phase 2A)." },

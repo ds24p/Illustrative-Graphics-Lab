@@ -1,4 +1,5 @@
 import type { ExperimentDefinition } from "../../core/experiments/types";
+import { publicUrl } from "../../core/assets/publicUrl";
 import { placementEducation } from "./education";
 import { placementCpuBackend } from "./methods/placement/backend.cpu";
 import { lloydCpuBackend } from "./methods/lloyd/backend.cpu";
@@ -46,14 +47,14 @@ export const stipplingExperiment: ExperimentDefinition<StipplingParameters> = {
   listingImage: {
     id: "stippling-result",
     label: "Stippling result",
-    src: "/samples/stippling-result.png",
+    src: publicUrl("samples/stippling-result.png"),
     alt: "A black-and-white still life built from many stippling dots.",
   },
   sampleImages: [
     {
       id: "studio-still-life",
       label: "Studio still life",
-      src: "/samples/grayscale-still-life.png",
+      src: publicUrl("samples/grayscale-still-life.png"),
       alt: "A colorful still life with a broad Processing-brightness range.",
     },
   ],

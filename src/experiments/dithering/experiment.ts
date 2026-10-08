@@ -1,4 +1,5 @@
 import type { ExperimentDefinition } from "../../core/experiments/types";
+import { publicUrl } from "../../core/assets/publicUrl";
 import { floydSteinberg1DCpuBackend } from "./methods/floyd-steinberg-1d/backend.cpu";
 import { floydSteinberg2DCpuBackend } from "./methods/floyd-steinberg-2d/backend.cpu";
 import { floydSteinbergLinesCpuBackend } from "./methods/floyd-steinberg-lines/backend.cpu";
@@ -104,14 +105,14 @@ export const ditheringExperiment: ExperimentDefinition<DitheringParameters> = {
   listingImage: {
     id: "dithering-result",
     label: "Dithering result",
-    src: "/samples/dithering-result.png",
+    src: publicUrl("samples/dithering-result.png"),
     alt: "A monochrome dithered still life made from fine diagonal marks.",
   },
   sampleImages: [
     {
       id: "studio-still-life",
       label: "Studio still life",
-      src: "/samples/grayscale-still-life.png",
+      src: publicUrl("samples/grayscale-still-life.png"),
       alt: "A colorful still life with strong edges and a broad brightness range.",
     },
   ],

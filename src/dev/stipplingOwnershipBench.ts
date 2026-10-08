@@ -1,3 +1,4 @@
+import { publicUrl } from "../core/assets/publicUrl";
 import { createProcessingIntensity } from "../experiments/stippling/intensity";
 import { initializeLloydPoints } from "../experiments/stippling/methods/lloyd/initialization";
 import {
@@ -25,7 +26,7 @@ const result = document.querySelector<HTMLElement>("#result")!;
 
 async function initializedSites(width: number, height: number, count: number) {
   const image = new Image();
-  image.src = "/samples/grayscale-still-life.png";
+  image.src = publicUrl("samples/grayscale-still-life.png");
   await image.decode();
   const canvas = document.createElement("canvas");
   canvas.width = width;
